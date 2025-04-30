@@ -66,22 +66,18 @@
 
         <div class="mb-3 position-relative">
             <label for="addressInput" class="form-label">Indirizzo</label>
-            <input type="text" id="addressInput" name="Address"
+            <input type="text"
+                   id="addressInput"
+                   name="LocationAddress"
                    class="form-control"
                    placeholder="Digita un indirizzo o clicca sulla mappa"
                    autocomplete="off" />
             <div id="suggestions" class="list-group"></div>
         </div>
 
-        <input type="hidden" id="Latitude" name="Latitude" />
-        <input type="hidden" id="Longitude" name="Longitude" />
-
         <div id="map" class="mb-4"></div>
 
-        <button type="submit" class="btn btn-primary">Salva</button>
-        <a asp-page="./TaskList" class="btn btn-secondary">Annulla</a>
-
-        <!-- hidden fields per la Location -->
+        <!-- campi nascosti per il Post -->
         <input type="hidden" id="LocationName" name="LocationName" />
         <input type="hidden" id="LocationAddress" name="LocationAddress" />
         <input type="hidden" id="City" name="City" />
@@ -89,6 +85,9 @@
         <input type="hidden" id="Country" name="Country" />
         <input type="hidden" id="Latitude" name="Latitude" />
         <input type="hidden" id="Longitude" name="Longitude" />
+
+        <button type="submit" class="btn btn-primary">Salva</button>
+        <a asp-page="./TaskList" class="btn btn-secondary">Annulla</a>
         
     </form>
 </main>
