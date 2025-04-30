@@ -1,0 +1,46 @@
+﻿@page
+@model TaskRoute.Pages.TaskListModel
+@{
+    ViewData["Title"] = "Task List";
+}
+
+<div class="container">
+    <h1 class="mb-4">Task List</h1>
+
+    <!-- Bottone per aggiungere un nuovo task -->
+    <div class="mb-4">
+        <a asp-page="AddTask" class="btn btn-primary">Add New Task</a>
+    </div>
+
+    <!-- Lista dei task in card -->
+    <div class="row g-4">
+        @foreach (var task in Model.Tasks)
+        {
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">@task.Title</h5>
+                            <p class="card-text">@task.Description</p>
+                            <div class="task-info d-flex align-items-center">
+                                <span class="me-3"><i class="fas fa-calendar-alt me-1"></i> @task.DueDate.ToShortDateString()</span>
+                                <span><i class="fas fa-map-marker-alt me-1"></i> @task.Location?.Name</span>
+                            </div>
+                            <div class="task-status mt-3">
+                                <span class="status @(task.IsCompleted ? "completed" : "incomplete")">
+                                @(task.IsCompleted ? "Completato" : "Incompleto")
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-footer d-flex justify-content-between">
+                            <a asp-page="./EditTask" asp-route-id="@task.Id" class="btn btn-sm btn-primary">
+                                <i class="fas fa-edit"></i> Modifica
+                            </a>
+                            <a asp-page="./DeleteTask" asp-route-id="@task.Id" class="btn btn-sm btn-danger">
+                                <i class="fas fa-trash"></i> Elimina
+                            </a>
+                        </div>
+                    </div>
+                </div>
+        }
+    </div>
+</div>

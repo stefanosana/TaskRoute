@@ -1,0 +1,93 @@
+﻿@page
+@model TaskRoute.Pages.IndexModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Le tue commissioni";
+}
+
+@section Styles {
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        main {
+            flex: 1;
+        }
+
+        #map {
+            height: 500px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+    </style>
+}
+
+<main class="container mt-4">
+    <h1 class="mb-4">Le tue commissioni</h1>
+    <div id="map" class="mb-4"></div>
+</main>
+
+<footer class="text-center py-3 border-top">
+    © 2025 - TaskRoute
+</footer>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // --- 1) Prepara mappa senza view ---
+            var map = L.map('map');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            // --- 2) Pre-serializziamo i dati dei task ---
+            var tasks = @Html.Raw(
+         JsonSerializer.Serialize(
+         Model.Commissions.Select(c => new
+         {
+             lat = c.Location?.Latitude ?? 45.4642,
+             lng = c.Location?.Longitude ?? 9.19,
+             title = c.Title,
+             id = c.Id
+         })
+         )
+         );
+
+            // --- 3) Funzione per aggiungere tutti i marker ---
+            function plotAllMarkers() {
+                tasks.forEach(function (t) {
+                    L.marker([t.lat, t.lng])
+                        .addTo(map)
+                        .bindPopup("<strong>" + t.title + "</strong>");
+                });
+            }
+
+            // --- 4) Geolocalizzazione utente e poi plottiamo i marker ---
+            function handleLocation(latlng, label) {
+                map.setView(latlng, 12);
+                L.circle(latlng, { radius: 50, color: '#007bff', fillOpacity: 0.3 })
+                    .addTo(map)
+                    .bindPopup(label)
+                    .openPopup();
+
+                // forza il ricalcolo dimensioni della mappa
+                setTimeout(() => map.invalidateSize(), 200);
+
+                // **solo ora** piazziamo tutti i marker
+                plotAllMarkers();
+            }
+
+            map.on('locationfound', e => handleLocation(e.latlng, "Sei qui"));
+            map.on('locationerror', () => handleLocation([45.4642, 9.19], "Milano fallback"));
+            map.locate({ setView: false, maxZoom: 12, timeout: 10000 });
+        });
+    </script>
+}

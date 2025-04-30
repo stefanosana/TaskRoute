@@ -1,0 +1,33 @@
+﻿@page "{id:int}"
+@model TaskRoute.Pages.EditTaskModel
+@{
+    ViewData["Title"] = "Edit Task";
+}
+
+<div class="container">
+    <h1>Edit Task</h1>
+
+    <form method="post">
+        <input type="hidden" asp-for="Task.Id" />
+        <div class="form-group">
+            <label for="Title">Title</label>
+            <input type="text" class="form-control" id="Title" asp-for="Task.Title" required />
+        </div>
+        <div class="form-group">
+            <label for="Description">Description</label>
+            <textarea class="form-control" id="Description" asp-for="Task.Description"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="DueDate">Due Date</label>
+            <input type="date" class="form-control" id="DueDate" asp-for="Task.DueDate" required />
+        </div>
+        <div class="form-group">
+            <label for="LocationId">Location</label>
+            <select class="form-control" id="LocationId" asp-for="Task.LocationId" asp-items="ViewBag.Locations">
+                <option value="">-- Select Location --</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Update</button>
+        <a asp-page="./TaskList" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>

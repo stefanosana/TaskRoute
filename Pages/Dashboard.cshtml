@@ -1,0 +1,53 @@
+﻿@page
+@model TaskRoute.Pages.DashboardModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="row">
+    <!-- Mappa -->
+    <div class="col-md-8">
+        <div id="map" style="height: 400px;"></div>
+    </div>
+
+    <!-- Statistiche -->
+    <div class="col-md-4">
+        <div class="stat-card bg-light p-4 mb-3">
+            <h4>Task Completati</h4>
+            <p class="stat-value">@Model.CompletedTasksCount</p>
+        </div>
+        <div class="stat-card bg-light p-4">
+            <h4>Task in Ritardo</h4>
+            <p class="stat-value">@Model.OverdueTasksCount</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Leaflet.js per la mappa -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <script>
+        // Inizializza la mappa
+        var map = L.map('map').setView([41.890238, 12.492244], 13); // Centro su Roma (o un'altra posizione predefinita)
+
+        // Aggiungi il layer OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Aggiungi marker per i task geolocalizzati
+        @foreach (var task in Model.Tasks)
+        {
+            if (task.Location != null)
+            {
+                <text>
+                        L.marker([@task.Location.Latitude, @task.Location.Longitude])
+                        .addTo(map)
+                        .bindPopup('@task.Title');
+                </text>
+            }
+        }
+    </script>
+}

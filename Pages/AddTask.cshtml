@@ -1,0 +1,211 @@
+﻿@page
+@model TaskRoute.Pages.AddTaskModel
+@{
+    ViewData["Title"] = "Aggiungi Commissione";
+}
+
+@section Styles {
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        main {
+            flex: 1;
+        }
+
+        #map {
+            height: 400px;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+        }
+
+        #suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        footer {
+            background: #f8f9fa;
+            padding: 1rem;
+            text-align: center;
+        }
+    </style>
+}
+
+<main class="container mt-4 position-relative">
+    <h1 class="mb-4">Aggiungi una nuova commissione</h1>
+    <form method="post">
+        <div class="mb-3">
+            <label asp-for="Commission.Title" class="form-label">Titolo</label>
+            <input asp-for="Commission.Title" class="form-control" required />
+            <span asp-validation-for="Commission.Title" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Commission.Description" class="form-label">Descrizione</label>
+            <textarea asp-for="Commission.Description" class="form-control" rows="3"></textarea>
+            <span asp-validation-for="Commission.Description" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Commission.DueDate" class="form-label">Data di scadenza</label>
+            <input asp-for="Commission.DueDate" class="form-control" type="date" required />
+            <span asp-validation-for="Commission.DueDate" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3 position-relative">
+            <label for="addressInput" class="form-label">Indirizzo</label>
+            <input type="text" id="addressInput" name="Address"
+                   class="form-control"
+                   placeholder="Digita un indirizzo o clicca sulla mappa"
+                   autocomplete="off" />
+            <div id="suggestions" class="list-group"></div>
+        </div>
+
+        <input type="hidden" id="Latitude" name="Latitude" />
+        <input type="hidden" id="Longitude" name="Longitude" />
+
+        <div id="map" class="mb-4"></div>
+
+        <button type="submit" class="btn btn-primary">Salva</button>
+        <a asp-page="./TaskList" class="btn btn-secondary">Annulla</a>
+
+        <!-- hidden fields per la Location -->
+        <input type="hidden" id="LocationName" name="LocationName" />
+        <input type="hidden" id="LocationAddress" name="LocationAddress" />
+        <input type="hidden" id="City" name="City" />
+        <input type="hidden" id="PostalCode" name="PostalCode" />
+        <input type="hidden" id="Country" name="Country" />
+        <input type="hidden" id="Latitude" name="Latitude" />
+        <input type="hidden" id="Longitude" name="Longitude" />
+        
+    </form>
+</main>
+
+<footer>
+    © 2025 - TaskRoute
+</footer>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var map = L.map('map');
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            var markerLayer = L.layerGroup().addTo(map);
+
+            function setLocation(latlng, label, details) {
+                // posiziona marker
+                markerLayer.clearLayers();
+                L.marker(latlng).addTo(markerLayer).bindPopup(label).openPopup();
+                map.setView(latlng, 15);
+
+                // riempi gli hidden
+                document.getElementById('LocationName').value = details.name || label;
+                document.getElementById('LocationAddress').value = details.address || label;
+                document.getElementById('City').value = details.city || '';
+                document.getElementById('PostalCode').value = details.postcode || '';
+                document.getElementById('Country').value = details.country || '';
+                document.getElementById('Latitude').value = latlng.lat;
+                document.getElementById('Longitude').value = latlng.lng;
+                document.getElementById('addressInput').value = label;
+            }
+
+            // geolocalizzazione browser
+            map.on('locationfound', e => setLocation(e.latlng, "Sei qui", {}));
+            map.on('locationerror', () => {
+                var milano = L.latLng(45.4642, 9.19);
+                setLocation(milano, "Milano", { name: "Milano" });
+            });
+            map.locate({ setView: false, maxZoom: 15, timeout: 10000 });
+
+            // Nominatim search
+            var input = document.getElementById('addressInput'),
+                box = document.getElementById('suggestions');
+
+            function searchNominatim(q, cb) {
+                fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q=" + encodeURIComponent(q))
+                    .then(r => r.json()).then(cb).catch(console.error);
+            }
+
+            // typeahead
+            input.addEventListener('input', function () {
+                var q = this.value.trim(); box.innerHTML = "";
+                if (q.length < 3) return;
+                searchNominatim(q, function (results) {
+                    results.forEach(item => {
+                        var a = document.createElement("a");
+                        a.className = "list-group-item list-group-item-action";
+                        a.textContent = item.display_name;
+                        a.href = "#";
+                        a.onclick = e => {
+                            e.preventDefault();
+                            // estraggo dettagli city/postcode/country
+                            var det = {
+                                name: item.display_name,
+                                address: item.display_name,
+                                city: item.address.city || item.address.town || item.address.village,
+                                postcode: item.address.postcode,
+                                country: item.address.country
+                            };
+                            setLocation(L.latLng(item.lat, item.lon), item.display_name, det);
+                            box.innerHTML = "";
+                        };
+                        box.appendChild(a);
+                    });
+                });
+            });
+
+            // invio con Enter = primo risultato
+            input.addEventListener('keydown', function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    var q = this.value.trim(); box.innerHTML = "";
+                    if (q.length < 3) return;
+                    searchNominatim(q, function (results) {
+                        if (results.length) {
+                            var i = results[0];
+                            var det = {
+                                name: i.display_name,
+                                address: i.display_name,
+                                city: i.address.city || i.address.town || i.address.village,
+                                postcode: i.address.postcode,
+                                country: i.address.country
+                            };
+                            setLocation(L.latLng(i.lat, i.lon), i.display_name, det);
+                        }
+                    });
+                }
+            });
+
+            // click mappa = reverse geocoding Nominatim
+            map.on('click', function (e) {
+                var u = "https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1"
+                    + "&lat=" + e.latlng.lat + "&lon=" + e.latlng.lng;
+                fetch(u).then(r => r.json()).then(data => {
+                    var addr = data.display_name,
+                        ad = data.address || {};
+                    var det = {
+                        name: addr,
+                        address: addr,
+                        city: ad.city || ad.town || ad.village,
+                        postcode: ad.postcode,
+                        country: ad.country
+                    };
+                    setLocation(e.latlng, addr, det);
+                }).catch(console.error);
+            });
+        });
+    </script>
+}

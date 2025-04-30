@@ -1,0 +1,21 @@
+﻿@page
+@model TaskRoute.Pages.OptimizeRouteModel
+@{
+    ViewData["Title"] = "Ottimizza Itinerario";
+}
+
+<h1>Ottimizza Itinerario</h1>
+
+<form method="post">
+    <div class="form-group">
+        <label for="userInput">Inserisci le tue commissioni:</label>
+        <textarea id="userInput" name="UserInput" class="form-control"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Ottimizza</button>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.AiResponse))
+{
+    <h2>Risultato:</h2>
+    <p>@Model.AiResponse</p>
+}
