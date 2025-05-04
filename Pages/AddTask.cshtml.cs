@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -40,8 +41,8 @@ namespace TaskRoute.Pages
 
             if (!string.IsNullOrEmpty(latStr) && !string.IsNullOrEmpty(lonStr))
             {
-                var lat = double.Parse(latStr);
-                var lon = double.Parse(lonStr);
+                var lat = double.Parse(latStr, CultureInfo.InvariantCulture);
+                var lon = double.Parse(lonStr, CultureInfo.InvariantCulture);
 
                 // 1) cerco una Location con gli stessi dati (puoi adattare i criteri)
                 var loc = await _context.Locations

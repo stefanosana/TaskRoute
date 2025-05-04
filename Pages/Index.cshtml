@@ -41,53 +41,53 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            // --- 1) Prepara mappa senza view ---
+            // 1) inizializza mappa senza view
             var map = L.map('map');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
 
-            // --- 2) Pre-serializziamo i dati dei task ---
+            // 2) prendi i dati delle commissioni
             var tasks = @Html.Raw(
-         JsonSerializer.Serialize(
-         Model.Commissions.Select(c => new
-         {
-             lat = c.Location?.Latitude ?? 45.4642,
-             lng = c.Location?.Longitude ?? 9.19,
-             title = c.Title,
-             id = c.Id
-         })
-         )
-         );
+                JsonSerializer.Serialize(
+                    Model.Commissions.Select(c => new {
+                        lat = c.Location?.Latitude ?? 45.4642,
+                        lng = c.Location?.Longitude ?? 9.19,
+                        title = c.Title,
+                        id = c.Id
+                    })
+                )
+            );
 
-            // --- 3) Funzione per aggiungere tutti i marker ---
-            function plotAllMarkers() {
-                tasks.forEach(function (t) {
-                    L.marker([t.lat, t.lng])
-                        .addTo(map)
-                        .bindPopup("<strong>" + t.title + "</strong>");
-                });
-            }
-
-            // --- 4) Geolocalizzazione utente e poi plottiamo i marker ---
-            function handleLocation(latlng, label) {
-                map.setView(latlng, 12);
-                L.circle(latlng, { radius: 50, color: '#007bff', fillOpacity: 0.3 })
+            // 3) crea i marker e raccoglili in un array
+            var markerList = tasks.map(function (t) {
+                return L.marker([t.lat, t.lng])
                     .addTo(map)
-                    .bindPopup(label)
-                    .openPopup();
+                    .bindPopup("<strong>" + t.title + "</strong>");
+            });
 
-                // forza il ricalcolo dimensioni della mappa
-                setTimeout(() => map.invalidateSize(), 200);
-
-                // **solo ora** piazziamo tutti i marker
-                plotAllMarkers();
+            // 4) se ci sono marker, adatta la vista ai loro bounds
+            if (markerList.length > 0) {
+                var group = L.featureGroup(markerList);
+                map.fitBounds(group.getBounds().pad(0.2));
+            } else {
+                // fallback generico
+                map.setView([45.4642, 9.19], 12);
             }
 
-            map.on('locationfound', e => handleLocation(e.latlng, "Sei qui"));
-            map.on('locationerror', () => handleLocation([45.4642, 9.19], "Milano fallback"));
+            // 5) (opzionale) disegna cerchio "Sei qui" ma NON cambia il centro
             map.locate({ setView: false, maxZoom: 12, timeout: 10000 });
+            map.on('locationfound', function (e) {
+                L.circle(e.latlng, {
+                    radius: 50,
+                    color: '#007bff',
+                    fillOpacity: 0.3
+                })
+                .addTo(map)
+                .bindPopup("Sei qui")
+                .openPopup();
+            });
         });
     </script>
 }

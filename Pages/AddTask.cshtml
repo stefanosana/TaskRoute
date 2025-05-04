@@ -45,6 +45,7 @@
 
 <main class="container mt-4 position-relative">
     <h1 class="mb-4">Aggiungi una nuova commissione</h1>
+
     <form method="post">
         <div class="mb-3">
             <label asp-for="Commission.Title" class="form-label">Titolo</label>
@@ -68,16 +69,16 @@
             <label for="addressInput" class="form-label">Indirizzo</label>
             <input type="text"
                    id="addressInput"
-                   name="LocationAddress"
-                   class="form-control"
-                   placeholder="Digita un indirizzo o clicca sulla mappa"
-                   autocomplete="off" />
+                   name="searchAddress"               <!-- serve solo per la ricerca -->
+            class="form-control"
+            placeholder="Digita un indirizzo o clicca sulla mappa"
+            autocomplete="off" />
             <div id="suggestions" class="list-group"></div>
         </div>
 
         <div id="map" class="mb-4"></div>
 
-        <!-- campi nascosti per il Post -->
+        <!-- campi nascosti per il Post (request.Form[…] nel PageModel) -->
         <input type="hidden" id="LocationName" name="LocationName" />
         <input type="hidden" id="LocationAddress" name="LocationAddress" />
         <input type="hidden" id="City" name="City" />
@@ -88,7 +89,6 @@
 
         <button type="submit" class="btn btn-primary">Salva</button>
         <a asp-page="./TaskList" class="btn btn-secondary">Annulla</a>
-        
     </form>
 </main>
 
@@ -105,7 +105,6 @@
             var markerLayer = L.layerGroup().addTo(map);
 
             function setLocation(latlng, label, details) {
-                // posiziona marker
                 markerLayer.clearLayers();
                 L.marker(latlng).addTo(markerLayer).bindPopup(label).openPopup();
                 map.setView(latlng, 15);
@@ -118,6 +117,8 @@
                 document.getElementById('Country').value = details.country || '';
                 document.getElementById('Latitude').value = latlng.lat;
                 document.getElementById('Longitude').value = latlng.lng;
+
+                // aggiorna il campo visibile di ricerca
                 document.getElementById('addressInput').value = label;
             }
 
@@ -140,7 +141,8 @@
 
             // typeahead
             input.addEventListener('input', function () {
-                var q = this.value.trim(); box.innerHTML = "";
+                var q = this.value.trim();
+                box.innerHTML = "";
                 if (q.length < 3) return;
                 searchNominatim(q, function (results) {
                     results.forEach(item => {
@@ -150,7 +152,6 @@
                         a.href = "#";
                         a.onclick = e => {
                             e.preventDefault();
-                            // estraggo dettagli city/postcode/country
                             var det = {
                                 name: item.display_name,
                                 address: item.display_name,
@@ -170,7 +171,8 @@
             input.addEventListener('keydown', function (e) {
                 if (e.key === "Enter") {
                     e.preventDefault();
-                    var q = this.value.trim(); box.innerHTML = "";
+                    var q = this.value.trim();
+                    box.innerHTML = "";
                     if (q.length < 3) return;
                     searchNominatim(q, function (results) {
                         if (results.length) {
