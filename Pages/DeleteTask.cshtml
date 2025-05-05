@@ -1,26 +1,39 @@
 ﻿@page "{id:int}"
 @model TaskRoute.Pages.DeleteTaskModel
 @{
-    ViewData["Title"] = "Delete Task";
+    ViewData["Title"] = "Elimina Commissione";
 }
 
 <div class="container">
-    <h1>Delete Task</h1>
+    <h1 class="mb-4">Elimina Commissione</h1>
 
-    <p>Are you sure you want to delete this task?</p>
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="alert alert-danger mb-4">
+                <i class="fas fa-exclamation-triangle me-2"></i> Sei sicuro di voler eliminare questa commissione?
+            </div>
 
-    <div class="task-card">
-        <h3>@Model.Task.Title</h3>
-        <p>@Model.Task.Description</p>
-        <div class="task-info">
-            <span><i class="fas fa-calendar-alt"></i> @Model.Task.DueDate.ToShortDateString()</span>
-            <span><i class="fas fa-map-marker-alt"></i> @Model.Task.Location?.Name</span>
+            <h5 class="card-title">@Model.Task.Title</h5>
+            <p class="card-text">@Model.Task.Description</p>
+            <div class="task-info">
+                <span><i class="fas fa-calendar-alt"></i> @Model.Task.DueDate.ToShortDateString()</span>
+                <span><i class="fas fa-map-marker-alt"></i> @Model.Task.Location?.Name</span>
+            </div>
+
+            <div class="status mt-3 @(Model.Task.IsCompleted ? "completed" : "incomplete")">
+                <i class="fas @(Model.Task.IsCompleted ? "fa-check-circle" : "fa-clock")"></i>
+                @(Model.Task.IsCompleted ? "Completata" : "Incompleta")
+            </div>
+        </div>
+
+        <div class="card-footer">
+            <form method="post" class="d-flex justify-content-end gap-2">
+                <input type="hidden" asp-for="Task.Id" />
+                <a asp-page="./TaskList" class="btn btn-outline">Annulla</a>
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-trash me-1"></i> Elimina
+                </button>
+            </form>
         </div>
     </div>
-
-    <form method="post">
-        <input type="hidden" asp-for="Task.Id" />
-        <button type="submit" class="btn btn-danger">Delete</button>
-        <a asp-page="./TaskList" class="btn btn-secondary">Cancel</a>
-    </form>
 </div>

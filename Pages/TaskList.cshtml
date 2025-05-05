@@ -12,7 +12,9 @@
 
     <!-- Bottone per aggiungere un nuovo task -->
     <div class="mb-4">
-        <a asp-page="AddTask" class="btn btn-primary">Add New Task</a>
+        <a asp-page="AddTask" class="btn btn-primary btn-lg">
+            <i class="fas fa-plus-circle"></i> Aggiungi Nuovo Task
+        </a>
     </div>
 
     <!-- Lista dei task in card -->
@@ -24,19 +26,19 @@
                     <div class="card-body">
                         <h5 class="card-title">@task.Title</h5>
                         <p class="card-text">@task.Description</p>
-                        <div class="task-info d-flex align-items-center">
-                            <span class="me-3">
-                                <i class="fas fa-calendar-alt me-1"></i>
+                        <div class="task-info">
+                            <span>
+                                <i class="fas fa-calendar-alt"></i>
                                 @task.DueDate.ToShortDateString()
                             </span>
                             <span>
-                                <i class="fas fa-map-marker-alt me-1"></i>
+                                <i class="fas fa-map-marker-alt"></i>
                                 @task.Location?.Name
                             </span>
                         </div>
 
                         <!-- Toggle di completamento -->
-                        <div class="task-status mt-3">
+                        <div class="task-status">
                             <div class="form-check form-switch">
                                 <input class="form-check-input"
                                        type="checkbox"

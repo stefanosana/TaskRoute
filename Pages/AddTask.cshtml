@@ -8,23 +8,13 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-        }
-
-        main {
-            flex: 1;
-        }
-
         #map {
             height: 400px;
-            border-radius: 8px;
+            border-radius: var(--card-border-radius);
             overflow: hidden;
             position: relative;
             z-index: 1;
+            margin-bottom: 1.5rem;
         }
 
         #suggestions {
@@ -33,76 +23,89 @@
             left: 0;
             right: 0;
             z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--gray-200);
+            border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
-        footer {
-            background: #f8f9fa;
-            padding: 1rem;
-            text-align: center;
+        #suggestions .list-group-item {
+            border: none;
+            padding: 0.75rem 1rem;
+        }
+
+        #suggestions .list-group-item:hover {
+            background-color: var(--gray-100);
         }
     </style>
 }
 
-<main class="container mt-4 position-relative">
-    <h1 class="mb-4">Aggiungi una nuova commissione</h1>
+<div class="container">
+    <h1 class="mb-4">Aggiungi Nuova Commissione</h1>
 
-    <form method="post">
-        <div class="mb-3">
-            <label asp-for="Commission.Title" class="form-label">Titolo</label>
-            <input asp-for="Commission.Title" class="form-control" required />
-            <span asp-validation-for="Commission.Title" class="text-danger"></span>
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                <div class="row g-3">
+                    <div class="col-md-6 form-group">
+                        <label asp-for="Commission.Title" class="form-label">Titolo</label>
+                        <input asp-for="Commission.Title" class="form-control" required />
+                        <span asp-validation-for="Commission.Title" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-6 form-group">
+                        <label asp-for="Commission.DueDate" class="form-label">Data di scadenza</label>
+                        <input asp-for="Commission.DueDate" class="form-control" type="date" required />
+                        <span asp-validation-for="Commission.DueDate" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-12 form-group">
+                        <label asp-for="Commission.Description" class="form-label">Descrizione</label>
+                        <textarea asp-for="Commission.Description" class="form-control" rows="3"></textarea>
+                        <span asp-validation-for="Commission.Description" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-12 form-group position-relative">
+                        <label for="addressInput" class="form-label">Indirizzo</label>
+                        <input type="text"
+                               id="addressInput"
+                               name="searchAddress"               <!-- serve solo per la ricerca -->
+                        <div id="suggestions" class="list-group"></div>
+                    </div>
+
+                    <div class="col-12">
+                        <div id="map"></div>
+                    </div>
+
+                    <!-- Campi nascosti per l'invio dei dati -->
+                    <input type="hidden" id="LocationName" name="LocationName" />
+                    <input type="hidden" id="LocationAddress" name="LocationAddress" />
+                    <input type="hidden" id="City" name="City" />
+                    <input type="hidden" id="PostalCode" name="PostalCode" />
+                    <input type="hidden" id="Country" name="Country" />
+                    <input type="hidden" id="Latitude" name="Latitude" />
+                    <input type="hidden" id="Longitude" name="Longitude" />
+
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                        <a asp-page="./TaskList" class="btn btn-outline">Annulla</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salva Commissione
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
-
-        <div class="mb-3">
-            <label asp-for="Commission.Description" class="form-label">Descrizione</label>
-            <textarea asp-for="Commission.Description" class="form-control" rows="3"></textarea>
-            <span asp-validation-for="Commission.Description" class="text-danger"></span>
-        </div>
-
-        <div class="mb-3">
-            <label asp-for="Commission.DueDate" class="form-label">Data di scadenza</label>
-            <input asp-for="Commission.DueDate" class="form-control" type="date" required />
-            <span asp-validation-for="Commission.DueDate" class="text-danger"></span>
-        </div>
-
-        <div class="mb-3 position-relative">
-            <label for="addressInput" class="form-label">Indirizzo</label>
-            <input type="text"
-                   id="addressInput"
-                   name="searchAddress"               <!-- serve solo per la ricerca -->
-            class="form-control"
-            placeholder="Digita un indirizzo o clicca sulla mappa"
-            autocomplete="off" />
-            <div id="suggestions" class="list-group"></div>
-        </div>
-
-        <div id="map" class="mb-4"></div>
-
-
-        <!-- necessari per l'invio dei dati (campi nascosti per il Post (request.Form[…] nel PageModel) -->
-        <input type="hidden" id="LocationName" name="LocationName" />
-        <input type="hidden" id="LocationAddress" name="LocationAddress" />
-        <input type="hidden" id="City" name="City" />
-        <input type="hidden" id="PostalCode" name="PostalCode" />
-        <input type="hidden" id="Country" name="Country" />
-        <input type="hidden" id="Latitude" name="Latitude" />
-        <input type="hidden" id="Longitude" name="Longitude" />
-
-        <button type="submit" class="btn btn-primary">Salva</button>
-        <a asp-page="./TaskList" class="btn btn-secondary">Annulla</a>
-    </form>
-</main>
-
-<footer>
-    © 2025 - TaskRoute
-</footer>
+    </div>
+</div>
 
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            var map = L.map('map');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            var map = L.map("map");
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
             var markerLayer = L.layerGroup().addTo(map);
 
             function setLocation(latlng, label, details) {
@@ -111,88 +114,107 @@
                 map.setView(latlng, 15);
 
                 // riempi gli hidden
-                document.getElementById('LocationName').value = details.name || label;
-                document.getElementById('LocationAddress').value = details.address || label;
-                document.getElementById('City').value = details.city || '';
-                document.getElementById('PostalCode').value = details.postcode || '';
-                document.getElementById('Country').value = details.country || '';
-                document.getElementById('Latitude').value = latlng.lat;
-                document.getElementById('Longitude').value = latlng.lng;
+                document.getElementById("LocationName").value = details.name || label;
+                document.getElementById("LocationAddress").value = details.address || label;
+                document.getElementById("City").value = details.city || "";
+                document.getElementById("PostalCode").value = details.postcode || "";
+                document.getElementById("Country").value = details.country || "";
+                document.getElementById("Latitude").value = latlng.lat;
+                document.getElementById("Longitude").value = latlng.lng;
 
                 // aggiorna il campo visibile di ricerca
-                document.getElementById('addressInput').value = label;
+                document.getElementById("addressInput").value = label;
+                document.getElementById("suggestions").innerHTML = ""; // Clear suggestions
             }
 
             // geolocalizzazione browser
-            map.on('locationfound', e => setLocation(e.latlng, "Sei qui", {}));
-            map.on('locationerror', () => {
+            map.on("locationfound", e => setLocation(e.latlng, "La tua posizione", {}));
+            map.on("locationerror", () => {
                 var milano = L.latLng(45.4642, 9.19);
-                setLocation(milano, "Milano", { name: "Milano" });
+                setLocation(milano, "Milano, Italia", { name: "Milano", city: "Milano", country: "Italia" });
             });
             map.locate({ setView: false, maxZoom: 15, timeout: 10000 });
 
             // Nominatim search
-            var input = document.getElementById('addressInput'),
-                box = document.getElementById('suggestions');
+            var input = document.getElementById("addressInput"),
+                box = document.getElementById("suggestions");
+            var searchTimeout;
 
             function searchNominatim(q, cb) {
                 fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q=" + encodeURIComponent(q))
                     .then(r => r.json()).then(cb).catch(console.error);
             }
 
-            // typeahead
-            input.addEventListener('input', function () {
+            // typeahead with debounce
+            input.addEventListener("input", function () {
+                clearTimeout(searchTimeout);
                 var q = this.value.trim();
                 box.innerHTML = "";
                 if (q.length < 3) return;
-                searchNominatim(q, function (results) {
-                    results.forEach(item => {
-                        var a = document.createElement("a");
-                        a.className = "list-group-item list-group-item-action";
-                        a.textContent = item.display_name;
-                        a.href = "#";
-                        a.onclick = e => {
-                            e.preventDefault();
-                            var det = {
-                                name: item.display_name,
-                                address: item.display_name,
-                                city: item.address.city || item.address.town || item.address.village,
-                                postcode: item.address.postcode,
-                                country: item.address.country
+
+                searchTimeout = setTimeout(() => {
+                    searchNominatim(q, function (results) {
+                        box.innerHTML = ""; // Clear previous results
+                        results.forEach(item => {
+                            var a = document.createElement("a");
+                            a.className = "list-group-item list-group-item-action";
+                            a.textContent = item.display_name;
+                            a.href = "#";
+                            a.onclick = e => {
+                                e.preventDefault();
+                                var det = {
+                                    name: item.display_name,
+                                    address: item.display_name,
+                                    city: item.address.city || item.address.town || item.address.village,
+                                    postcode: item.address.postcode,
+                                    country: item.address.country
+                                };
+                                setLocation(L.latLng(item.lat, item.lon), item.display_name, det);
                             };
-                            setLocation(L.latLng(item.lat, item.lon), item.display_name, det);
-                            box.innerHTML = "";
-                        };
-                        box.appendChild(a);
+                            box.appendChild(a);
+                        });
                     });
-                });
+                }, 300); // Debounce time: 300ms
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener("click", function(event) {
+                if (!input.contains(event.target) && !box.contains(event.target)) {
+                    box.innerHTML = "";
+                }
             });
 
             // invio con Enter = primo risultato
-            input.addEventListener('keydown', function (e) {
+            input.addEventListener("keydown", function (e) {
                 if (e.key === "Enter") {
                     e.preventDefault();
-                    var q = this.value.trim();
-                    box.innerHTML = "";
-                    if (q.length < 3) return;
-                    searchNominatim(q, function (results) {
-                        if (results.length) {
-                            var i = results[0];
-                            var det = {
-                                name: i.display_name,
-                                address: i.display_name,
-                                city: i.address.city || i.address.town || i.address.village,
-                                postcode: i.address.postcode,
-                                country: i.address.country
-                            };
-                            setLocation(L.latLng(i.lat, i.lon), i.display_name, det);
-                        }
-                    });
+                    clearTimeout(searchTimeout);
+                    var firstSuggestion = box.querySelector("a");
+                    if (firstSuggestion) {
+                        firstSuggestion.click(); // Simulate click on the first suggestion
+                    } else {
+                        // If no suggestions, perform a direct search
+                        var q = this.value.trim();
+                        if (q.length < 3) return;
+                        searchNominatim(q, function (results) {
+                            if (results.length) {
+                                var i = results[0];
+                                var det = {
+                                    name: i.display_name,
+                                    address: i.display_name,
+                                    city: i.address.city || i.address.town || i.address.village,
+                                    postcode: i.address.postcode,
+                                    country: i.address.country
+                                };
+                                setLocation(L.latLng(i.lat, i.lon), i.display_name, det);
+                            }
+                        });
+                    }
                 }
             });
 
             // click mappa = reverse geocoding Nominatim
-            map.on('click', function (e) {
+            map.on("click", function (e) {
                 var u = "https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1"
                     + "&lat=" + e.latlng.lat + "&lon=" + e.latlng.lng;
                 fetch(u).then(r => r.json()).then(data => {

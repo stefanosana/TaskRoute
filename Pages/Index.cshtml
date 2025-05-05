@@ -8,61 +8,41 @@
 @section Styles {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
-    <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-        }
-
-        main {
-            flex: 1;
-        }
-
-        #map {
-            height: 500px;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .task-item.selected {
-            background-color: #e9f5ff; /* Light blue background for selected items */
-            border-left: 5px solid #0d6efd; /* Blue border for selected items */
-        }
-
-        .task-list-container {
-            max-height: 300px; /* Limit height and add scroll */
-            overflow-y: auto;
-            margin-bottom: 1rem;
-        }
-    </style>
 }
 
-<main class="container mt-4">
+<div class="container">
     <h1 class="mb-4">Le tue commissioni</h1>
 
-    <div class="row">
-        <div class="col-md-5 mb-3">
-            <h5>Seleziona le commissioni da ottimizzare:</h5>
-            <div class="mb-2">
-                <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-2">Seleziona Tutti</button>
-                <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">Deseleziona Tutti</button>
+    <div class="row g-4">
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Seleziona le commissioni da ottimizzare</h5>
+                    <div class="mb-3">
+                        <button id="selectAllBtn" class="btn btn-sm btn-outline btn-primary me-2">
+                            <i class="fas fa-check-double"></i> Seleziona Tutti
+                        </button>
+                        <button id="deselectAllBtn" class="btn btn-sm btn-outline">
+                            <i class="fas fa-times"></i> Deseleziona Tutti
+                        </button>
+                    </div>
+                    <div id="taskList" class="list-group task-list-container" style="max-height: 350px; overflow-y: auto;"></div>
+                    <button id="optimizeBtn" class="btn btn-primary w-100 mt-3">
+                        <i class="fas fa-route"></i> Trova percorso ottimale
+                    </button>
+                </div>
             </div>
-            <div id="taskList" class="list-group task-list-container"></div>
-            <button id="optimizeBtn" class="btn btn-success mt-2">Trova percorso ottimale</button>
         </div>
         <div class="col-md-7">
-            <div id="map"></div>
-            <div id="routeInfo" class="alert alert-info d-none mt-3"></div>
+            <div class="card h-100">
+                <div class="card-body">
+                    <div id="map"></div>
+                    <div id="routeInfo" class="alert alert-info d-none mt-3"></div>
+                </div>
+            </div>
         </div>
     </div>
-
-</main>
-
-<footer class="text-center py-3 border-top mt-auto">
-    © 2025 - TaskRoute
-</footer>
+</div>
 
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -234,7 +214,7 @@
                     .finally(() => {
                         // Restore button state
                         optimizeBtn.disabled = false;
-                        optimizeBtn.innerHTML = 'Trova percorso ottimale';
+                        optimizeBtn.innerHTML = '<i class="fas fa-route"></i> Trova percorso ottimale';
                     });
             });
 
@@ -243,8 +223,8 @@
             map.on('locationfound', function (e) {
                 L.circle(e.latlng, {
                     radius: 50,
-                    color: '#007bff',
-                    fillColor: '#007bff',
+                    color: 'var(--primary)',
+                    fillColor: 'var(--primary)',
                     fillOpacity: 0.2
                 }).addTo(map).bindPopup("La tua posizione approssimativa");
             });
@@ -254,4 +234,3 @@
         });
     </script>
 }
-
