@@ -21,6 +21,9 @@ namespace TaskRoute.Models
 
         public bool IsCompleted { get; set; } = false; // Stato di completamento
 
+        [DataType(DataType.DateTime)]
+        public DateTime? CompletedAt { get; set; }
+
         [ForeignKey("Location")]
         public int? LocationId { get; set; } // ID della posizione associata (opzionale)
 

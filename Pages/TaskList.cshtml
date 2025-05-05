@@ -4,6 +4,9 @@
     ViewData["Title"] = "Task List";
 }
 
+<!-- Antiforgery token per le chiamate AJAX -->
+<form id="anti-forgery-form" method="post" asp-antiforgery="true" style="display:none;"></form>
+
 <div class="container">
     <h1 class="mb-4">Task List</h1>
 
@@ -16,31 +19,79 @@
     <div class="row g-4">
         @foreach (var task in Model.Tasks)
         {
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h5 class="card-title">@task.Title</h5>
-                            <p class="card-text">@task.Description</p>
-                            <div class="task-info d-flex align-items-center">
-                                <span class="me-3"><i class="fas fa-calendar-alt me-1"></i> @task.DueDate.ToShortDateString()</span>
-                                <span><i class="fas fa-map-marker-alt me-1"></i> @task.Location?.Name</span>
-                            </div>
-                            <div class="task-status mt-3">
-                                <span class="status @(task.IsCompleted ? "completed" : "incomplete")">
-                                @(task.IsCompleted ? "Completato" : "Incompleto")
-                                </span>
-                            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">@task.Title</h5>
+                        <p class="card-text">@task.Description</p>
+                        <div class="task-info d-flex align-items-center">
+                            <span class="me-3">
+                                <i class="fas fa-calendar-alt me-1"></i>
+                                @task.DueDate.ToShortDateString()
+                            </span>
+                            <span>
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                @task.Location?.Name
+                            </span>
                         </div>
-                        <div class="card-footer d-flex justify-content-between">
-                            <a asp-page="./EditTask" asp-route-id="@task.Id" class="btn btn-sm btn-primary">
-                                <i class="fas fa-edit"></i> Modifica
-                            </a>
-                            <a asp-page="./DeleteTask" asp-route-id="@task.Id" class="btn btn-sm btn-danger">
-                                <i class="fas fa-trash"></i> Elimina
-                            </a>
+
+                        <!-- Toggle di completamento -->
+                        <div class="task-status mt-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       id="completeToggle-@task.Id"
+                                @(task.IsCompleted ? "checked" : "") />
+                                <label class="form-check-label status @(task.IsCompleted ? "completed" : "incomplete")"
+                                       for="completeToggle-@task.Id"
+                                       id="status-text-@task.Id">
+                                    @(task.IsCompleted ? "Completato" : "Incompleto")
+                                </label>
+                            </div>
                         </div>
                     </div>
+
+                    <div class="card-footer d-flex justify-content-between">
+                        <a asp-page="./EditTask" asp-route-id="@task.Id" class="btn btn-sm btn-primary">
+                            <i class="fas fa-edit"></i> Modifica
+                        </a>
+                        <a asp-page="./DeleteTask" asp-route-id="@task.Id" class="btn btn-sm btn-danger">
+                            <i class="fas fa-trash"></i> Elimina
+                        </a>
+                    </div>
                 </div>
+            </div>
         }
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        // Aggiunge listener a tutti i toggle checkbox
+        document.querySelectorAll('input[id^="completeToggle-"]').forEach(cb => {
+            cb.addEventListener('change', function () {
+                const id = this.id.split('-')[1];
+                const isCompleted = this.checked;
+                const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+                fetch(`?handler=ToggleCompleted&id=${id}&isCompleted=${isCompleted}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            console.error('Errore nel toggle dello stato del task');
+                            return;
+                        }
+                        // Aggiorna testo e classe del label
+                        const label = document.getElementById(`status-text-${id}`);
+                        label.textContent = isCompleted ? 'Completato' : 'Incompleto';
+                        label.className = `form-check-label status ${isCompleted ? 'completed' : 'incomplete'}`;
+                    })
+                    .catch(err => console.error('Fetch error:', err));
+            });
+        });
+    </script>
+}

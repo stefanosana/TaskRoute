@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TaskRoute;
 using TaskRoute.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +31,8 @@ builder.Services.AddScoped<HttpClient>();
 
 // Aggiunta del supporto per Razor Pages
 builder.Services.AddRazorPages();
+
+builder.Services.AddHostedService<CompletedTaskCleanupService>();
 
 var app = builder.Build();
 

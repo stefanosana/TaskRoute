@@ -1,17 +1,19 @@
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using TaskRoute.Data;
-using TaskRoute.Models;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
-using MyTask = TaskRoute.Models.Commission; // Per evitare conflitti di nomi
+using TaskRoute.Data;
+using TaskRoute.Models;
+using MyTask = TaskRoute.Models.Commission;
 
 namespace TaskRoute.Pages
 {
-    [Authorize] // Solo gli utenti autenticati possono accedere a questa pagina
+    [Authorize]
     public class TaskListModel : PageModel
     {
         private readonly ApplicationDbContext _context;
@@ -25,19 +27,35 @@ namespace TaskRoute.Pages
             _userManager = userManager;
         }
 
-        public async System.Threading.Tasks.Task OnGetAsync()
+        public async Task OnGetAsync()
         {
-            // Ottieni l'utente corrente
             var user = await _userManager.GetUserAsync(User);
-            if (user == null)
-            {
-                return;
-            }
+            if (user == null) return;
 
-            // Carica solo i task dell'utente corrente
             Tasks = await _context.Commissions
-                .Where(t => t.UserId == user.Id) // Filtra i task per UserId
+                .Where(t => t.UserId == user.Id)
                 .ToListAsync();
+        }
+
+        // diventa handler Razor Pages OnPostToggleCompletedAsync
+        public async Task<JsonResult> OnPostToggleCompletedAsync(int id, bool isCompleted)
+        {
+            var commission = await _context.Commissions.FindAsync(id);
+            if (commission == null)
+                return new JsonResult(new { error = "NotFound" }) { StatusCode = 404 };
+
+            commission.IsCompleted = isCompleted;
+            commission.CompletedAt = isCompleted
+                                       ? DateTime.UtcNow
+                                       : (DateTime?)null;
+
+            await _context.SaveChangesAsync();
+
+            return new JsonResult(new
+            {
+                commission.IsCompleted,
+                commission.CompletedAt
+            });
         }
     }
 }
