@@ -6,8 +6,8 @@
 }
 
 @section Styles {
-    <link rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
     <style>
         html, body {
             height: 100%;
@@ -25,69 +25,233 @@
             border-radius: 8px;
             overflow: hidden;
         }
+
+        .task-item.selected {
+            background-color: #e9f5ff; /* Light blue background for selected items */
+            border-left: 5px solid #0d6efd; /* Blue border for selected items */
+        }
+
+        .task-list-container {
+            max-height: 300px; /* Limit height and add scroll */
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }
     </style>
 }
 
 <main class="container mt-4">
     <h1 class="mb-4">Le tue commissioni</h1>
-    <div id="map" class="mb-4"></div>
+
+    <div class="row">
+        <div class="col-md-5 mb-3">
+            <h5>Seleziona le commissioni da ottimizzare:</h5>
+            <div class="mb-2">
+                <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-2">Seleziona Tutti</button>
+                <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">Deseleziona Tutti</button>
+            </div>
+            <div id="taskList" class="list-group task-list-container"></div>
+            <button id="optimizeBtn" class="btn btn-success mt-2">Trova percorso ottimale</button>
+        </div>
+        <div class="col-md-7">
+            <div id="map"></div>
+            <div id="routeInfo" class="alert alert-info d-none mt-3"></div>
+        </div>
+    </div>
+
 </main>
 
-<footer class="text-center py-3 border-top">
+<footer class="text-center py-3 border-top mt-auto">
     © 2025 - TaskRoute
 </footer>
 
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            // 1) inizializza mappa senza view
             var map = L.map('map');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '&copy; OpenStreetMap'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
 
-            // 2) prendi i dati delle commissioni
-            var tasks = @Html.Raw(
-                JsonSerializer.Serialize(
-                    Model.Commissions.Select(c => new {
-                        lat = c.Location?.Latitude ?? 45.4642,
-                        lng = c.Location?.Longitude ?? 9.19,
-                        title = c.Title,
-                        id = c.Id
-                    })
-                )
-            );
+            var markerLayer = L.layerGroup().addTo(map);
+            var routeControl = null;
+            var taskMarkers = {}; // Store markers by task ID
 
-            // 3) crea i marker e raccoglili in un array
-            var markerList = tasks.map(function (t) {
-                return L.marker([t.lat, t.lng])
-                    .addTo(map)
-                    .bindPopup("<strong>" + t.title + "</strong>");
+            var tasks = @Html.Raw(JsonSerializer.Serialize(Model.Commissions.Select(c => new
+            {
+                id = c.Id,
+                lat = c.Location?.Latitude ?? 45.4642, // Default coordinates if null
+                lng = c.Location?.Longitude ?? 9.19,
+                title = c.Title,
+                description = c.Description ?? "Nessuna descrizione"
+            })));
+
+            var taskListElement = document.getElementById("taskList");
+
+            tasks.forEach(t => {
+                // Create Marker
+                var marker = L.marker([t.lat, t.lng])
+                    .bindPopup(`<strong>${t.title}</strong><br>${t.description}`)
+                    .addTo(markerLayer);
+                taskMarkers[t.id] = marker; // Store marker
+
+                // Create List Item
+                var item = document.createElement("label");
+                item.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-center task-item";
+                item.htmlFor = `task-check-${t.id}`;
+                item.dataset.taskId = t.id;
+                item.innerHTML = `
+                            <div>
+                                <strong class="mb-1">${t.title}</strong>
+                                <small class="d-block text-muted">${t.description.substring(0, 50)}${t.description.length > 50 ? '...' : ''}</small>
+                            </div>
+                            <input type="checkbox" class="form-check-input task-check" id="task-check-${t.id}" value="${t.id}" data-lat="${t.lat}" data-lng="${t.lng}" />
+                        `;
+                taskListElement.appendChild(item);
+
+                // Add click listener to list item for map interaction
+                item.addEventListener('click', function (e) {
+                    if (e.target.type !== 'checkbox') { // Prevent double toggle if checkbox is clicked directly
+                        var checkbox = item.querySelector('.task-check');
+                        checkbox.checked = !checkbox.checked;
+                        // Manually trigger change event for consistency
+                        checkbox.dispatchEvent(new Event('change'));
+                    }
+                });
+
+                // Add change listener to checkbox for visual feedback and map interaction
+                var checkbox = item.querySelector('.task-check');
+                checkbox.addEventListener('change', function () {
+                    item.classList.toggle('selected', checkbox.checked);
+                    if (checkbox.checked) {
+                        map.setView([t.lat, t.lng], 15); // Center map on selected task
+                        marker.openPopup();
+                    } else {
+                        marker.closePopup();
+                    }
+                });
             });
 
-            // 4) se ci sono marker, adatta la vista ai loro bounds
-            if (markerList.length > 0) {
-                var group = L.featureGroup(markerList);
-                map.fitBounds(group.getBounds().pad(0.2));
+            // Fit map bounds or set default view
+            if (tasks.length > 0) {
+                var bounds = L.latLngBounds(tasks.map(t => [t.lat, t.lng]));
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds.pad(0.2));
+                }
             } else {
-                // fallback generico
-                map.setView([45.4642, 9.19], 12);
+                map.setView([45.4642, 9.19], 12); // Default view (e.g., Milan)
             }
 
-            // 5) (opzionale) disegna cerchio "Sei qui" ma NON cambia il centro
-            map.locate({ setView: false, maxZoom: 12, timeout: 10000 });
+            // Select/Deselect All Buttons
+            document.getElementById("selectAllBtn").addEventListener("click", function () {
+                document.querySelectorAll(".task-check").forEach(cb => {
+                    if (!cb.checked) {
+                        cb.checked = true;
+                        cb.dispatchEvent(new Event('change')); // Trigger change for visual update
+                    }
+                });
+            });
+
+            document.getElementById("deselectAllBtn").addEventListener("click", function () {
+                document.querySelectorAll(".task-check").forEach(cb => {
+                    if (cb.checked) {
+                        cb.checked = false;
+                        cb.dispatchEvent(new Event('change')); // Trigger change for visual update
+                    }
+                });
+            });
+
+            // Optimize Button Logic
+            document.getElementById("optimizeBtn").addEventListener("click", function () {
+                var selectedCheckboxes = document.querySelectorAll(".task-check:checked");
+                var selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+
+                if (selectedIds.length < 2) {
+                    alert("Seleziona almeno due commissioni per calcolare un percorso.");
+                    return;
+                }
+
+                // Show loading state (optional)
+                var optimizeBtn = document.getElementById("optimizeBtn");
+                optimizeBtn.disabled = true;
+                optimizeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Ottimizzazione...';
+                var routeInfoDiv = document.getElementById("routeInfo");
+                routeInfoDiv.classList.add("d-none");
+
+                fetch("/Index?handler=Optimize", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "RequestVerificationToken": document.querySelector('input[name="__RequestVerificationToken"]').value // Add antiforgery token
+                    },
+                    body: JSON.stringify(selectedIds)
+                })
+                    .then(res => {
+                        if (!res.ok) {
+                            return res.json().then(err => { throw new Error(err.error || `Errore ${res.status}`); });
+                        }
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (data.error) { // Check for application-level errors from backend
+                            throw new Error(data.error);
+                        }
+
+                        if (routeControl) map.removeControl(routeControl);
+
+                        var waypoints = data.waypoints.map(p => L.latLng(p.lat, p.lng));
+
+                        if (waypoints.length > 0) {
+                            routeControl = L.Routing.control({
+                                waypoints: waypoints,
+                                routeWhileDragging: false,
+                                show: true, // Show the itinerary steps
+                                createMarker: function () { return null; } // Don't create default markers, use ours
+                            }).addTo(map);
+
+                            // Fit map to the route
+                            map.fitBounds(L.latLngBounds(waypoints));
+
+                            // Display route info
+                            routeInfoDiv.classList.remove("d-none");
+                            routeInfoDiv.innerHTML = `
+                                        <strong>Percorso ottimizzato!</strong><br/>
+                                        ${data.motivation}<br/>
+                                        <strong>Tempo stimato:</strong> ${data.estimatedMinutes} minuti
+                                    `;
+                        } else {
+                            throw new Error("Nessun waypoint valido ricevuto per il percorso.");
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Errore durante l'ottimizzazione:", err);
+                        routeInfoDiv.classList.remove("d-none");
+                        routeInfoDiv.classList.replace("alert-info", "alert-danger");
+                        routeInfoDiv.innerHTML = `<strong>Errore:</strong> ${err.message || "Si è verificato un problema durante l'ottimizzazione del percorso."}`;
+                    })
+                    .finally(() => {
+                        // Restore button state
+                        optimizeBtn.disabled = false;
+                        optimizeBtn.innerHTML = 'Trova percorso ottimale';
+                    });
+            });
+
+            // Optional: Add user location marker
+            map.locate({ setView: false, maxZoom: 16 });
             map.on('locationfound', function (e) {
                 L.circle(e.latlng, {
                     radius: 50,
                     color: '#007bff',
-                    fillOpacity: 0.3
-                })
-                .addTo(map)
-                .bindPopup("Sei qui")
-                .openPopup();
+                    fillColor: '#007bff',
+                    fillOpacity: 0.2
+                }).addTo(map).bindPopup("La tua posizione approssimativa");
+            });
+            map.on('locationerror', function (e) {
+                console.warn("Errore nel localizzare l'utente:", e.message);
             });
         });
     </script>
 }
+

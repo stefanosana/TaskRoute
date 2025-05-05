@@ -34,6 +34,11 @@ builder.Services.AddRazorPages();
 
 builder.Services.AddHostedService<CompletedTaskCleanupService>();
 
+builder.Services.AddHttpClient();
+
+// Configure Antiforgery (important for POST requests from JS)
+builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
+
 var app = builder.Build();
 
 // Applica le migrazioni e inizializza i dati di seed durante l'avvio
@@ -65,6 +70,8 @@ else
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
+
+
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
