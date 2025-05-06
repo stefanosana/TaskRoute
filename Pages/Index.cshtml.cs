@@ -1,20 +1,18 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Security.Claims;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using TaskRoute.Data;
 using TaskRoute.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Net.Http;
+using System;
+using TaskRoute.Services; // Assumendo che GeminiService sia qui
 
 namespace TaskRoute.Pages
 {
@@ -22,15 +20,14 @@ namespace TaskRoute.Pages
     public class IndexModel : PageModel
     {
         private readonly ApplicationDbContext _context;
-        private readonly IHttpClientFactory _clientFactory;
         private readonly ILogger<IndexModel> _logger;
-        private readonly string _apiKey = "AIzaSyBWu31eHDDU8vo01g4czH5kWbTuKLCbCe0"; // User provided API Key
+        private readonly GeminiService _geminiService; // Inietta il servizio Gemini
 
-        public IndexModel(ApplicationDbContext context, IHttpClientFactory clientFactory, ILogger<IndexModel> logger)
+        public IndexModel(ApplicationDbContext context, ILogger<IndexModel> logger, GeminiService geminiService)
         {
             _context = context;
-            _clientFactory = clientFactory;
             _logger = logger;
+            _geminiService = geminiService;
         }
 
         public List<Commission> Commissions { get; set; }
@@ -39,247 +36,141 @@ namespace TaskRoute.Pages
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             Commissions = await _context.Commissions
-                .Include(c => c.Location)
                 .Where(c => c.UserId == userId && !c.IsCompleted)
-                .OrderBy(c => c.DueDate) // Optionally order by due date initially
+                .Include(c => c.Location) // Assicurati che la Location sia caricata
+                .OrderBy(c => c.DueDate)  // Ordina per data di scadenza
+                .ThenBy(c => c.SpecificTime) // Poi per orario specifico
                 .ToListAsync();
         }
 
-        // Represents a task location for optimization
-        public class Waypoint
+        // Struttura per i dati inviati a Gemini e per la sua risposta
+        private class WaypointInfo
         {
             public int Id { get; set; }
+            public string Title { get; set; }
             public double Lat { get; set; }
             public double Lng { get; set; }
-            public string Title { get; set; }
+            public string DueDate { get; set; }
+            public string SpecificTime { get; set; } // Formato HH:mm
+            public int? EstimatedDurationMinutes { get; set; }
         }
 
-        // --- Gemini API Request/Response Structures ---
-        private class GeminiRequestPart
-        {
-            [JsonPropertyName("text")]
-            public string Text { get; set; }
-        }
-
-        private class GeminiRequestContent
-        {
-            [JsonPropertyName("parts")]
-            public List<GeminiRequestPart> Parts { get; set; }
-        }
-
-        private class GeminiRequest
-        {
-            [JsonPropertyName("contents")]
-            public List<GeminiRequestContent> Contents { get; set; }
-        }
-
-        private class GeminiResponsePart
-        {
-            [JsonPropertyName("text")]
-            public string Text { get; set; }
-        }
-
-        private class GeminiResponseContent
-        {
-            [JsonPropertyName("parts")]
-            public List<GeminiResponsePart> Parts { get; set; }
-            [JsonPropertyName("role")]
-            public string Role { get; set; }
-        }
-
-        private class GeminiResponseCandidate
-        {
-            [JsonPropertyName("content")]
-            public GeminiResponseContent Content { get; set; }
-            // Add other potential fields like finishReason, safetyRatings if needed
-        }
-
-        private class GeminiResponse
-        {
-            [JsonPropertyName("candidates")]
-            public List<GeminiResponseCandidate> Candidates { get; set; }
-            // Add promptFeedback if needed
-        }
-
-        // Structure expected within the Gemini response text (as JSON)
         private class OptimizationResult
         {
-            [JsonPropertyName("ordered_titles")]
             public List<string> OrderedTitles { get; set; }
-            [JsonPropertyName("motivation")]
+            public int EstimatedTotalMinutes { get; set; } // Modificato da EstimatedMinutes
             public string Motivation { get; set; }
-            [JsonPropertyName("estimated_minutes")]
-            public int EstimatedMinutes { get; set; }
         }
-        // ---------------------------------------------
 
-        [HttpPost]
-        [ValidateAntiForgeryToken] // Enable AntiForgery Token validation
-        public async Task<IActionResult> OnPostOptimizeAsync([FromBody] List<int> selectedIds)
+        public async Task<IActionResult> OnPostOptimizeAsync([FromBody] List<int> selectedTaskIds)
         {
-            if (selectedIds == null || !selectedIds.Any())
+            if (selectedTaskIds == null || selectedTaskIds.Count < 2)
             {
-                return BadRequest(new { error = "Nessun ID di commissione selezionato." });
+                return BadRequest(new { error = "Seleziona almeno due commissioni per l'ottimizzazione." });
             }
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId))
+            var selectedCommissions = await _context.Commissions
+                .Where(c => c.UserId == userId && selectedTaskIds.Contains(c.Id) && c.LocationId.HasValue)
+                .Include(c => c.Location)
+                .ToListAsync();
+
+            if (selectedCommissions.Count < 2)
             {
-                return Unauthorized();
+                return BadRequest(new { error = "Almeno due delle commissioni selezionate devono avere una posizione valida per l'ottimizzazione." });
             }
+
+            var waypoints = selectedCommissions.Select(c => new WaypointInfo
+            {
+                Id = c.Id,
+                Title = c.Title,
+                Lat = c.Location.Latitude,
+                Lng = c.Location.Longitude,
+                DueDate = c.DueDate.ToString("yyyy-MM-dd"),
+                SpecificTime = c.SpecificTime?.ToString("hh\\:mm"), // Formato HH:mm, es. 14:30
+                EstimatedDurationMinutes = c.EstimatedDurationMinutes // Rimosso il segno di chiusura errato
+            }).ToList(); // Aggiunto il punto e virgola e chiuso correttamente la chiamata LINQ
+
+
+            // Costruzione del prompt per Gemini
+            var tasksString = string.Join("; ", waypoints.Select(w =>
+                $"Task: '{w.Title}', Posizione: ({w.Lat},{w.Lng}), Data Scadenza: {w.DueDate}" +
+                (w.SpecificTime != null ? $", Orario Specifico: {w.SpecificTime}" : "") +
+                (w.EstimatedDurationMinutes.HasValue ? $", Durata Svolgimento Stimata: {w.EstimatedDurationMinutes} minuti" : "")
+            ));
+
+            var prompt = $"Sei un assistente per l'ottimizzazione di percorsi e gestione del tempo. Considera i seguenti task: " +
+                         tasksString + ". " +
+                         "Devi fornire l'ordine ottimale per visitarli. Per ogni task, se è specificata una 'Durata Svolgimento Stimata', questa è il tempo da passare sul posto. " +
+                         "Devi stimare i tempi di viaggio tra le località basandoti sulle loro coordinate geografiche. " +
+                         "L'obiettivo è minimizzare il tempo totale, che include sia i tempi di viaggio sia i tempi di svolgimento delle attività. " +
+                         "Se sono specificati 'Orari Specifici', questi dovrebbero essere rispettati il più possibile o considerati come vincoli temporali. " +
+                         "Rispondi ESCLUSIVAMENTE con un oggetto JSON strutturato così: " +
+                         "{{\"OrderedTitles\": [\"Titolo Task Ordinato 1\", \"Titolo Task Ordinato 2\", ...], \"EstimatedTotalMinutes\": MINUTI_TOTALI_STIMATI_REALISTICI, \"Motivation\": \"Testo della motivazione dettagliata...\"}}. " +
+                         "Assicurati che 'OrderedTitles' contenga esattamente gli stessi titoli dei task forniti, solo riordinati. " +
+                         "'EstimatedTotalMinutes' deve essere un numero intero che rappresenta la stima realistica del tempo totale necessario (viaggi + attività). " +
+                         "'Motivation' deve spiegare chiaramente perché questo ordine è efficiente, come tiene conto degli orari (se presenti), delle durate delle attività e dei tempi di viaggio stimati.";
+
+            _logger.LogInformation("Prompt per Gemini: {Prompt}", prompt);
 
             try
             {
-                var commissions = await _context.Commissions
-                    .Include(c => c.Location)
-                    .Where(c => selectedIds.Contains(c.Id) && c.UserId == userId && !c.IsCompleted)
-                    .ToListAsync();
+                // Update the method call to use the correct method name from GeminiService
+                var generatedText = await _geminiService.GetResponseAsync(prompt);
 
-                if (commissions.Count < 2)
+                _logger.LogInformation("Risposta da Gemini: {GeneratedText}", generatedText);
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                OptimizationResult optimizationResult = null;
+                try
                 {
-                    return BadRequest(new { error = "Seleziona almeno due commissioni per l'ottimizzazione." });
-                }
-
-                var waypoints = commissions.Select(c => new Waypoint
-                {
-                    Id = c.Id,
-                    Title = c.Title,
-                    // Ensure Location is not null, handle potential nulls gracefully
-                    Lat = c.Location?.Latitude ?? 0, // Use 0 or throw if location is mandatory
-                    Lng = c.Location?.Longitude ?? 0
-                }).ToList();
-
-                // Check for invalid coordinates (if 0,0 is invalid)
-                if (waypoints.Any(w => w.Lat == 0 && w.Lng == 0))
-                {
-                    _logger.LogWarning("Alcune commissioni selezionate non hanno coordinate valide.");
-                    // Decide whether to proceed or return an error
-                    // return BadRequest(new { error = "Alcune commissioni selezionate non hanno coordinate valide." });
-                }
-
-                // --- Call Gemini API --- 
-                var client = _clientFactory.CreateClient();
-                string endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={_apiKey}"; // Using v1beta and a specific model
-
-                // Improved prompt asking for JSON output
-                var promptBuilder = new StringBuilder();
-                promptBuilder.AppendLine("Dato il seguente elenco di commissioni con i loro titoli e coordinate GPS (latitudine, longitudine):");
-                foreach (var wp in waypoints)
-                {
-                    promptBuilder.AppendLine($"- Titolo: '{wp.Title}', Coordinate: {wp.Lat},{wp.Lng}");
-                }
-                promptBuilder.AppendLine("\nPer favore, ottimizza l'ordine di visita di queste commissioni per minimizzare il tempo di viaggio totale. Considera un punto di partenza ragionevole se non specificato.");
-                promptBuilder.AppendLine("Fornisci la risposta ESCLUSIVAMENTE in formato JSON valido con la seguente struttura:");
-                promptBuilder.AppendLine("{");
-                promptBuilder.AppendLine("  \"ordered_titles\": [\"Titolo commissione 1 nell'ordine ottimale\", \"Titolo commissione 2\", ...], // Lista dei titoli ESATTI nell'ordine ottimizzato");
-                promptBuilder.AppendLine("  \"motivation\": \"Spiegazione concisa (2-3 frasi) del perché questo ordine è ottimale...\",");
-                promptBuilder.AppendLine("  \"estimated_minutes\": N // Stima numerica del tempo totale in minuti (solo il numero)");
-                promptBuilder.AppendLine("}");
-                promptBuilder.AppendLine("Assicurati che i titoli in 'ordered_titles' corrispondano ESATTAMENTE a quelli forniti nell'input.");
-
-                var requestPayload = new GeminiRequest
-                {
-                    Contents = new List<GeminiRequestContent>
+                    // Tentativo di pulire la risposta di Gemini se include ```json ... ```
+                    var cleanedJson = generatedText.Trim();
+                    if (cleanedJson.StartsWith("```json"))
                     {
-                        new GeminiRequestContent { Parts = new List<GeminiRequestPart> { new GeminiRequestPart { Text = promptBuilder.ToString() } } }
+                        cleanedJson = cleanedJson.Substring(7);
                     }
-                };
+                    if (cleanedJson.EndsWith("```"))
+                    {
+                        cleanedJson = cleanedJson.Substring(0, cleanedJson.Length - 3);
+                    }
+                    cleanedJson = cleanedJson.Trim();
 
-                var jsonPayload = JsonSerializer.Serialize(requestPayload);
-                var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-                _logger.LogInformation("Chiamata API Gemini all'endpoint: {Endpoint}", endpoint);
-                // _logger.LogDebug("Payload Gemini: {Payload}", jsonPayload); // Log payload only if necessary for debugging
-
-                HttpResponseMessage httpResponse = await client.PostAsync(endpoint, httpContent);
-
-                var responseBody = await httpResponse.Content.ReadAsStringAsync();
-
-                if (!httpResponse.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Errore nella chiamata API Gemini. Status: {StatusCode}, Response: {ResponseBody}", httpResponse.StatusCode, responseBody);
-                    return StatusCode((int)httpResponse.StatusCode, new { error = $"Errore durante la comunicazione con il servizio di ottimizzazione (Codice: {httpResponse.StatusCode}). Dettagli: {responseBody}" });
-                }
-
-                _logger.LogInformation("Risposta API Gemini ricevuta con successo.");
-                // _logger.LogDebug("Response Body Gemini: {ResponseBody}", responseBody); // Log response body only if necessary
-
-                // --- Parse Gemini Response --- 
-                GeminiResponse geminiResponse;
-                try
-                {
-                    geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseBody);
+                    optimizationResult = JsonSerializer.Deserialize<OptimizationResult>(cleanedJson, options);
                 }
                 catch (JsonException jsonEx)
                 {
-                    _logger.LogError(jsonEx, "Errore durante il parsing della risposta JSON esterna di Gemini: {ResponseBody}", responseBody);
-                    return StatusCode(500, new { error = "Formato risposta esterna del servizio di ottimizzazione non valido." });
-                }
-
-                if (geminiResponse?.Candidates == null || !geminiResponse.Candidates.Any() || geminiResponse.Candidates[0].Content?.Parts == null || !geminiResponse.Candidates[0].Content.Parts.Any())
-                {
-                    _logger.LogError("Struttura della risposta di Gemini non valida o vuota: {ResponseBody}", responseBody);
-                    return StatusCode(500, new { error = "Risposta del servizio di ottimizzazione incompleta o non valida." });
-                }
-
-                string generatedText = geminiResponse.Candidates[0].Content.Parts[0].Text;
-                _logger.LogInformation("Testo generato da Gemini: {GeneratedText}", generatedText);
-
-                // Clean the text if it's wrapped in markdown code blocks
-                generatedText = generatedText.Trim().Trim('`');
-                if (generatedText.StartsWith("json"))
-                {
-                    generatedText = generatedText.Substring(4).Trim();
-                }
-
-                OptimizationResult optimizationResult;
-                try
-                {
-                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true }; // Be flexible with casing
-                    optimizationResult = JsonSerializer.Deserialize<OptimizationResult>(generatedText, options);
-                }
-                catch (JsonException jsonEx)
-                {
-                    _logger.LogError(jsonEx, "Errore durante il parsing del JSON interno generato da Gemini: {GeneratedText}", generatedText);
-                    return StatusCode(500, new { error = "Impossibile interpretare l'ordine ottimizzato ricevuto. Il formato potrebbe essere cambiato." });
+                    _logger.LogError(jsonEx, "Errore durante il parsing del JSON da Gemini: {GeneratedText}", generatedText);
+                    return StatusCode(500, new { error = "Impossibile interpretare la risposta del servizio di ottimizzazione. Formato non valido." });
                 }
 
                 if (optimizationResult?.OrderedTitles == null || optimizationResult.OrderedTitles.Count != waypoints.Count)
                 {
-                    _logger.LogError("L'ordine dei titoli ricevuto da Gemini non corrisponde al numero di task inviati. Ricevuto: {ReceivedTitles}, Atteso: {ExpectedCount}. Testo: {GeneratedText}",
+                    _logger.LogError("L'ordine dei titoli da Gemini non corrisponde. Ricevuto: {ReceivedTitles}, Atteso: {ExpectedCount}. Testo: {GeneratedText}",
                        optimizationResult?.OrderedTitles?.Count, waypoints.Count, generatedText);
-                    return StatusCode(500, new { error = "L'ordine ottimizzato ricevuto non include tutte le commissioni selezionate." });
+                    return StatusCode(500, new { error = "L'ordine ottimizzato ricevuto non include tutte le commissioni selezionate o è malformato." });
                 }
 
-                // --- Reorder Waypoints based on Gemini's response --- 
-                var orderedWaypoints = new List<Waypoint>();
-                var waypointDict = waypoints.ToDictionary(w => w.Title, w => w); // For quick lookup
+                var orderedWaypoints = new List<WaypointInfo>();
+                var waypointDict = waypoints.ToDictionary(w => w.Title, w => w, StringComparer.OrdinalIgnoreCase); // Usa IgnoreCase per il matching
 
-                foreach (var title in optimizationResult.OrderedTitles)
+                foreach (var titleFromGemini in optimizationResult.OrderedTitles)
                 {
-                    if (waypointDict.TryGetValue(title, out var waypoint))
+                    // Tentativo di match esatto o normalizzato
+                    var matchedWaypoint = waypoints.FirstOrDefault(w => NormalizeString(w.Title) == NormalizeString(titleFromGemini));
+
+                    if (matchedWaypoint != null)
                     {
-                        orderedWaypoints.Add(waypoint);
+                        orderedWaypoints.Add(matchedWaypoint);
                     }
                     else
                     {
-                        // Try a normalized comparison if exact match fails
-                        var normalizedTitle = NormalizeString(title);
-                        var matchedWaypoint = waypoints.FirstOrDefault(w => NormalizeString(w.Title) == normalizedTitle);
-                        if (matchedWaypoint != null)
-                        {
-                            _logger.LogWarning("Titolo '{OriginalTitle}' da Gemini trovato tramite matching normalizzato come '{MatchedTitle}'.", title, matchedWaypoint.Title);
-                            orderedWaypoints.Add(matchedWaypoint);
-                        }
-                        else
-                        {
-                            _logger.LogError("Titolo '{Title}' ricevuto da Gemini non trovato tra le commissioni originali. Testo: {GeneratedText}", title, generatedText);
-                            return StatusCode(500, new { error = $"Il servizio di ottimizzazione ha restituito un titolo non valido ('{title}')." });
-                        }
+                        _logger.LogError("Titolo '{Title}' da Gemini non trovato tra le commissioni originali. Originali: {OriginalTitles}. Testo Gemini: {GeneratedText}",
+                            titleFromGemini, string.Join(", ", waypoints.Select(w => w.Title)), generatedText);
+                        return StatusCode(500, new { error = $"Il servizio di ottimizzazione ha restituito un titolo non corrispondente ('{titleFromGemini}')." });
                     }
                 }
 
-                // Ensure all original waypoints are included in the final list
                 if (orderedWaypoints.Count != waypoints.Count)
                 {
                     _logger.LogError("Errore nella ricostruzione dell'ordine: il numero finale di waypoint ({FinalCount}) non corrisponde a quello iniziale ({InitialCount}).", orderedWaypoints.Count, waypoints.Count);
@@ -287,23 +178,17 @@ namespace TaskRoute.Pages
                 }
 
                 _logger.LogInformation("Percorso ottimizzato generato con successo.");
-
                 return new JsonResult(new
                 {
-                    waypoints = orderedWaypoints.Select(w => new { w.Lat, w.Lng, w.Title }), // Return only necessary info
-                    estimatedMinutes = optimizationResult.EstimatedMinutes > 0 ? optimizationResult.EstimatedMinutes : orderedWaypoints.Count * 7 + 10, // Fallback estimation
-                    motivation = optimizationResult.Motivation ?? "Ordine ottimizzato per ridurre i tempi di percorrenza."
+                    waypoints = orderedWaypoints.Select(w => new { w.Lat, w.Lng, w.Title }),
+                    estimatedTotalMinutes = optimizationResult.EstimatedTotalMinutes, // Modificato qui
+                    motivation = optimizationResult.Motivation ?? "Ordine ottimizzato per efficienza."
                 });
             }
             catch (HttpRequestException httpEx)
             {
                 _logger.LogError(httpEx, "Errore HTTP durante la chiamata API Gemini.");
                 return StatusCode(503, new { error = "Servizio di ottimizzazione temporaneamente non disponibile (Errore di rete)." });
-            }
-            catch (DbUpdateException dbEx)
-            {
-                _logger.LogError(dbEx, "Errore durante l'accesso al database.");
-                return StatusCode(500, new { error = "Errore durante il recupero dei dati delle commissioni." });
             }
             catch (Exception ex)
             {
@@ -312,10 +197,10 @@ namespace TaskRoute.Pages
             }
         }
 
-        // Helper for case-insensitive, non-alphanumeric comparison
         private string NormalizeString(string input)
         {
             if (string.IsNullOrEmpty(input)) return string.Empty;
+            // Semplice normalizzazione: lowercase e rimozione spazi extra. Potrebbe essere più robusta.
             return new string(input.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
         }
     }

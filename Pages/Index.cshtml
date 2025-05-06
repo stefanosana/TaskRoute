@@ -199,7 +199,7 @@
                             routeInfoDiv.innerHTML = `
                                         <strong>Percorso ottimizzato!</strong><br/>
                                         ${data.motivation}<br/>
-                                        <strong>Tempo stimato:</strong> ${data.estimatedMinutes} minuti
+                                        <strong>Tempo stimato:</strong> ${data.estimatedTotalMinutes} minuti
                                     `;
                         } else {
                             throw new Error("Nessun waypoint valido ricevuto per il percorso.");

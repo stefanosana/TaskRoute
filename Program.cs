@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using TaskRoute;
 using TaskRoute.Data;
+using TaskRoute.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,8 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options =>
 })
 .AddRoles<IdentityRole>() // Supporto ai ruoli
 .AddEntityFrameworkStores<ApplicationDbContext>();
+builder.Services.AddHttpClient<GeminiService>();
+builder.Services.AddScoped<GeminiService>();
 
 // Aggiunta del servizio HttpClient (se necessario)
 builder.Services.AddScoped<HttpClient>();

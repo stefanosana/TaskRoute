@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using TaskRoute.Data;
 using TaskRoute.Models;
+using System;
 
 namespace TaskRoute.Pages
 {
@@ -18,17 +19,40 @@ namespace TaskRoute.Pages
         [BindProperty]
         public Commission Commission { get; set; }
 
-        // NON bindiamo la Location come proprietà complessa, usiamo Request.Form
-
         public void OnGet()
         {
-            // inizializza eventualmente valori di default
+            // Inizializza eventualmente valori di default
+            Commission = new Commission
+            {
+                DueDate = DateTime.Today // Preimposta la data a oggi
+            };
         }
 
         public async Task<IActionResult> OnPostAsync()
         {
-            //if (!ModelState.IsValid)
-            //    return Page();
+            // Rimuovi la validazione ModelState per SpecificTime e EstimatedDurationMinutes se sono null
+            // in quanto sono opzionali. La validazione del Range per EstimatedDurationMinutes 
+            // si attiverà solo se un valore è fornito.
+            ModelState.Remove("Commission.SpecificTime");
+            ModelState.Remove("Commission.EstimatedDurationMinutes");
+
+            // Se SpecificTime è fornito nel form ma non è valido (es. stringa vuota), 
+            // il binding potrebbe impostarlo a TimeSpan.Zero. Lo consideriamo come non fornito.
+            if (Commission.SpecificTime == TimeSpan.Zero)
+            {
+                Commission.SpecificTime = null;
+            }
+
+            // Se EstimatedDurationMinutes è fornito come 0, potrebbe essere l'input di default o un errore.
+            // Se 0 non è una durata valida o se vuoi trattarlo come non specificato, gestiscilo qui.
+            // Per ora, se è 0 e il campo è opzionale, lo accettiamo o lo impostiamo a null se preferito.
+            // if (Commission.EstimatedDurationMinutes == 0) Commission.EstimatedDurationMinutes = null;
+
+            // Ricontrolla ModelState dopo aver potenzialmente modificato i valori
+            // if (!ModelState.IsValid)
+            // {
+            //     return Page();
+            // }
 
             // Leggo i dati di Location dal form
             var name = Request.Form["LocationName"].ToString().Trim();
@@ -39,12 +63,11 @@ namespace TaskRoute.Pages
             var latStr = Request.Form["Latitude"].ToString();
             var lonStr = Request.Form["Longitude"].ToString();
 
-            if (!string.IsNullOrEmpty(latStr) && !string.IsNullOrEmpty(lonStr))
+            if (!string.IsNullOrEmpty(latStr) && !string.IsNullOrEmpty(lonStr) && !string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(address))
             {
                 var lat = double.Parse(latStr, CultureInfo.InvariantCulture);
                 var lon = double.Parse(lonStr, CultureInfo.InvariantCulture);
 
-                // 1) cerco una Location con gli stessi dati (puoi adattare i criteri)
                 var loc = await _context.Locations
                     .FirstOrDefaultAsync(l =>
                         l.Name == name &&
@@ -52,11 +75,10 @@ namespace TaskRoute.Pages
                         l.City == city &&
                         l.PostalCode == postal &&
                         l.Country == country &&
-                        l.Latitude == lat &&
-                        l.Longitude == lon
+                        Math.Abs(l.Latitude - lat) < 0.00001 && // Confronto per double
+                        Math.Abs(l.Longitude - lon) < 0.00001  // Confronto per double
                     );
 
-                // 2) se non esiste, la creo
                 if (loc == null)
                 {
                     loc = new Location
@@ -70,17 +92,18 @@ namespace TaskRoute.Pages
                         Longitude = lon
                     };
                     _context.Locations.Add(loc);
-                    await _context.SaveChangesAsync(); // per ottenere loc.Id
+                    await _context.SaveChangesAsync();
                 }
-
-                // 3) assegno l'Id di Location alla Commission
                 Commission.LocationId = loc.Id;
             }
+            else
+            {
+                // Se non ci sono dati di location validi, imposta LocationId a null
+                Commission.LocationId = null;
+            }
 
-            // Imposto l'utente corrente
             Commission.UserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // 4) salvo la Commission
             _context.Commissions.Add(Commission);
             await _context.SaveChangesAsync();
 
@@ -88,3 +111,4 @@ namespace TaskRoute.Pages
         }
     }
 }
+

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         #map {
-            height: 400px;
+            height: 350px; /* Ridotta altezza per fare spazio ai nuovi campi */
             border-radius: var(--card-border-radius);
             overflow: hidden;
             position: relative;
@@ -53,25 +53,45 @@
                 <input asp-for="Commission.Id" type="hidden" />
 
                 <div class="row g-3">
-                    <div class="col-md-6 form-group">
+                    <div class="col-md-12 form-group">
                         <label asp-for="Commission.Title" class="form-label">Titolo</label>
                         <input asp-for="Commission.Title" class="form-control" required />
                         <span asp-validation-for="Commission.Title" class="text-danger"></span>
                     </div>
 
-                    <div class="col-md-6 form-group">
-                        <label asp-for="Commission.DueDate" class="form-label">Data di scadenza</label>
+                    <div class="col-md-4 form-group">
+                        <label asp-for="Commission.DueDate" class="form-label">Data</label>
                         <input asp-for="Commission.DueDate" class="form-control" type="date" required />
                         <span asp-validation-for="Commission.DueDate" class="text-danger"></span>
                     </div>
 
-                    <div class="col-12 form-group">
-                        <label asp-for="Commission.Description" class="form-label">Descrizione</label>
-                        <textarea asp-for="Commission.Description" class="form-control" rows="3"></textarea>
-                        <span asp-validation-for="Commission.Description" class="text-danger"></span>
+                    <div class="col-md-4 form-group">
+                        <label asp-for="Commission.SpecificTime" class="form-label">Orario (Opzionale)</label>
+                        <input asp-for="Commission.SpecificTime" class="form-control" type="time" />
+                        <span asp-validation-for="Commission.SpecificTime" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4 form-group">
+                        <label asp-for="Commission.EstimatedDurationMinutes" class="form-label">Durata Stimata (minuti)</label>
+                        <input asp-for="Commission.EstimatedDurationMinutes" class="form-control" type="number" list="durationSuggestions" placeholder="Es. 45" />
+                        <datalist id="durationSuggestions">
+                            <option value="15"> </option>
+                            <option value="30"> </option>
+                            <option value="45"> </option>
+                            <option value="60"> </option>
+                            <option value="90"> </option>
+                            <option value="120"> </option>
+                        </datalist>
+                        <span asp-validation-for="Commission.EstimatedDurationMinutes" class="text-danger"></span>
                     </div>
 
                     <div class="col-12 form-group">
+                        <label asp-for="Commission.Description" class="form-label">Descrizione</label>
+                        <textarea asp-for="Commission.Description" class="form-control" rows="2"></textarea>
+                        <span asp-validation-for="Commission.Description" class="text-danger"></span>
+                    </div>
+
+                     <div class="col-12 form-group">
                         <div class="form-check form-switch">
                             <input asp-for="Commission.IsCompleted" class="form-check-input" />
                             <label asp-for="Commission.IsCompleted" class="form-check-label status @(Model.Commission.IsCompleted ? "completed" : "incomplete")">
@@ -115,56 +135,53 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            var map = L.map('map');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            var map = L.map("map");
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
             var markerLayer = L.layerGroup().addTo(map);
 
             function setLocation(latlng, label, details) {
                 markerLayer.clearLayers();
                 L.marker(latlng).addTo(markerLayer).bindPopup(label).openPopup();
                 map.setView(latlng, 15);
-                document.getElementById('LocationName').value = details.name || label;
-                document.getElementById('LocationAddress').value = details.address || label;
-                document.getElementById('City').value = details.city || '';
-                document.getElementById('PostalCode').value = details.postcode || '';
-                document.getElementById('Country').value = details.country || '';
-                document.getElementById('Latitude').value = latlng.lat;
-                document.getElementById('Longitude').value = latlng.lng;
-                document.getElementById('addressInput').value = label;
-                document.getElementById('suggestions').innerHTML = ""; // Clear suggestions
+                document.getElementById("LocationName").value = details.name || label;
+                document.getElementById("LocationAddress").value = details.address || label;
+                document.getElementById("City").value = details.city || "";
+                document.getElementById("PostalCode").value = details.postcode || "";
+                document.getElementById("Country").value = details.country || "";
+                document.getElementById("Latitude").value = latlng.lat;
+                document.getElementById("Longitude").value = latlng.lng;
+                document.getElementById("addressInput").value = label;
+                document.getElementById("suggestions").innerHTML = ""; 
             }
 
-        @* Centro iniziale come prima… *@
         @if (Model.Commission.LocationId.HasValue)
         {
             <text>
-                        setLocation(
-                        L.latLng(@Model.Commission.Location.Latitude.ToString(CultureInfo.InvariantCulture),
-                @Model.Commission.Location.Longitude.ToString(CultureInfo.InvariantCulture)),
-                        "@Model.Commission.Location.Name",
-                        {
-                            name: "@Model.Commission.Location.Name",
-                        address: "@Model.Commission.Location.Address",
-                        city: "@Model.Commission.Location.City",
-                        postcode: "@Model.Commission.Location.PostalCode",
-                        country: "@Model.Commission.Location.Country"
-                            }
-                        );
+                var initialLatLng = L.latLng(@Model.Commission.Location.Latitude.ToString(CultureInfo.InvariantCulture), @Model.Commission.Location.Longitude.ToString(CultureInfo.InvariantCulture));
+                var initialLabel = "@Model.Commission.Location.Name";
+                var initialDetails = {
+                    name: "@Model.Commission.Location.Name",
+                    address: "@Model.Commission.Location.Address",
+                    city: "@Model.Commission.Location.City",
+                    postcode: "@Model.Commission.Location.PostalCode",
+                    country: "@Model.Commission.Location.Country"
+                };
+                setLocation(initialLatLng, initialLabel, initialDetails);
+                document.getElementById('addressInput').value = initialLabel; // Imposta anche il campo di ricerca
             </text>
         }
         else
         {
             <text>
-                        map.on('locationfound', e => setLocation(e.latlng, "La tua posizione", { }));
-                        map.on('locationerror', () => {
-                            var milano = L.latLng(45.4642, 9.19);
-                        setLocation(milano, "Milano, Italia", {name: "Milano", city: "Milano", country: "Italia" });
-                        });
-                        map.locate({setView: false, maxZoom: 15, timeout: 10000 });
+                map.on("locationfound", e => setLocation(e.latlng, "La tua posizione", {}));
+                map.on("locationerror", () => {
+                    var milano = L.latLng(45.4642, 9.19);
+                    setLocation(milano, "Milano, Italia", {name: "Milano", city: "Milano", country: "Italia" });
+                });
+                map.locate({setView: false, maxZoom: 15, timeout: 10000 });
             </text>
         }
 
-            // Nominatim search
             var input = document.getElementById("addressInput"),
                 box = document.getElementById("suggestions");
             var searchTimeout;
@@ -174,7 +191,6 @@
                     .then(r => r.json()).then(cb).catch(console.error);
             }
 
-            // typeahead with debounce
             input.addEventListener("input", function () {
                 clearTimeout(searchTimeout);
                 var q = this.value.trim();
@@ -183,7 +199,7 @@
 
                 searchTimeout = setTimeout(() => {
                     searchNominatim(q, function (results) {
-                        box.innerHTML = ""; // Clear previous results
+                        box.innerHTML = ""; 
                         results.forEach(item => {
                             var a = document.createElement("a");
                             a.className = "list-group-item list-group-item-action";
@@ -203,26 +219,23 @@
                             box.appendChild(a);
                         });
                     });
-                }, 300); // Debounce time: 300ms
+                }, 300); 
             });
 
-            // Hide suggestions when clicking outside
             document.addEventListener("click", function(event) {
                 if (!input.contains(event.target) && !box.contains(event.target)) {
                     box.innerHTML = "";
                 }
             });
 
-            // invio con Enter = primo risultato
             input.addEventListener("keydown", function (e) {
                 if (e.key === "Enter") {
                     e.preventDefault();
                     clearTimeout(searchTimeout);
                     var firstSuggestion = box.querySelector("a");
                     if (firstSuggestion) {
-                        firstSuggestion.click(); // Simulate click on the first suggestion
+                        firstSuggestion.click(); 
                     } else {
-                        // If no suggestions, perform a direct search
                         var q = this.value.trim();
                         if (q.length < 3) return;
                         searchNominatim(q, function (results) {
@@ -242,8 +255,7 @@
                 }
             });
 
-            // click mappa = reverse geocoding Nominatim
-            map.on('click', function (e) {
+            map.on("click", function (e) {
                 var url = "https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1"
                     + "&lat=" + e.latlng.lat + "&lon=" + e.latlng.lng;
                 fetch(url)
@@ -263,7 +275,6 @@
                     .catch(console.error);
             });
 
-            // Toggle status label class when checkbox changes
             document.querySelector('input[name="Commission.IsCompleted"]').addEventListener('change', function() {
                 const label = this.nextElementSibling;
                 if (this.checked) {

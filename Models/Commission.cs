@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using System;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 
@@ -17,7 +18,16 @@ namespace TaskRoute.Models
         public string Description { get; set; } // Descrizione dettagliata
 
         [DataType(DataType.Date)]
-        public DateTime DueDate { get; set; } // Data di scadenza
+        public DateTime DueDate { get; set; } // Data di scadenza (giorno)
+
+        // Orario specifico per la commissione (opzionale)
+        [DataType(DataType.Time)]
+        public TimeSpan? SpecificTime { get; set; }
+
+        // Durata stimata per lo svolgimento della commissione in minuti (opzionale)
+        // Ad esempio: 30 (per 30 minuti), 60 (per 1 ora)
+        [Range(0, 1440)] // Limita la durata tra 0 minuti e 24 ore (1440 minuti)
+        public int? EstimatedDurationMinutes { get; set; }
 
         public bool IsCompleted { get; set; } = false; // Stato di completamento
 
@@ -36,5 +46,27 @@ namespace TaskRoute.Models
         // Relazione con l'utente
         public IdentityUser User { get; set; }
 
+        // Combinazione di DueDate e SpecificTime per un DateTime completo, utile per ordinamenti e logica
+        [NotMapped] // Questa proprietà non viene mappata al database direttamente
+        public DateTime? DueDateTime
+        {
+            get
+            {
+                if (SpecificTime.HasValue)
+                {
+                    return DueDate.Date + SpecificTime.Value;
+                }
+                return DueDate.Date; // Se non c'è orario, considera l'inizio della giornata
+            }
+            set
+            {
+                if (value.HasValue)
+                {
+                    DueDate = value.Value.Date;
+                    SpecificTime = value.Value.TimeOfDay;
+                }
+            }
+        }
     }
 }
+

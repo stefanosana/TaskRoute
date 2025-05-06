@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging; // Aggiunto per il logging
 
 namespace TaskRoute.Services
 {
@@ -11,24 +12,21 @@ namespace TaskRoute.Services
     {
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
+        private readonly ILogger<GeminiService> _logger; // Aggiunto per il logging
 
-        public GeminiService(HttpClient httpClient, IConfiguration configuration)
+        // Modificato per iniettare ILogger
+        public GeminiService(HttpClient httpClient, IConfiguration configuration, ILogger<GeminiService> logger)
         {
             _httpClient = httpClient;
-            _apiKey = configuration["GeminiApi:ApiKey"] ?? throw new InvalidOperationException("Gemini API key non trovata.");
+            // Corretta la chiave di configurazione per corrispondere a appsettings.json fornito ("Gemini:ApiKey")
+            _apiKey = configuration["Gemini:ApiKey"] ?? throw new InvalidOperationException("La chiave API Gemini (Gemini:ApiKey) non è stata trovata nella configurazione.");
+            _logger = logger; // Inizializza il logger
         }
 
-        /// <summary>
-        /// Invia una richiesta all'API di Gemini e restituisce la risposta.
-        /// </summary>
-        /// <param name="prompt">Il testo da inviare all'API.</param>
-        /// <returns>La risposta dell'API come stringa.</returns>
         public async Task<string> GetResponseAsync(string prompt)
         {
-            // URL dell'endpoint API di Gemini
             var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_apiKey}";
 
-            // Creazione del corpo della richiesta
             var requestBody = new
             {
                 contents = new[]
@@ -37,35 +35,78 @@ namespace TaskRoute.Services
                     {
                         parts = new[]
                         {
-                            new
-                            {
-                                text = prompt
-                            }
+                            new { text = prompt }
                         }
                     }
+                },
+                // Aggiunte configurazioni di generazione comuni, puoi personalizzarle o rimuoverle se non necessarie
+                generationConfig = new
+                {
+                    temperature = 0.7, // Controlla la casualità, più basso = più deterministico
+                    maxOutputTokens = 2048 // Massimo numero di token nella risposta
                 }
             };
 
-            // Serializzazione del corpo in JSON
-            var jsonContent = new StringContent(
-                JsonSerializer.Serialize(requestBody),
-                Encoding.UTF8,
-                "application/json"
-            );
+            var jsonRequestContent = JsonSerializer.Serialize(requestBody);
+            var httpContent = new StringContent(jsonRequestContent, Encoding.UTF8, "application/json");
 
-            // Aggiunta dell'intestazione di autorizzazione
-            _httpClient.DefaultRequestHeaders.Clear();
+            _logger.LogInformation("Richiesta inviata a Gemini. URL: {Url}, Corpo: {Body}", url, jsonRequestContent);
 
-            // Invio della richiesta HTTP POST
-            var response = await _httpClient.PostAsync(url, jsonContent);
+            try
+            {
+                var response = await _httpClient.PostAsync(url, httpContent);
 
-            // Verifica dello stato della risposta
-            response.EnsureSuccessStatusCode();
+                var responseBody = await response.Content.ReadAsStringAsync();
 
-            // Lettura della risposta come stringa
-            var responseBody = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Errore dalla API Gemini. Status Code: {StatusCode}, Risposta: {ResponseBody}", response.StatusCode, responseBody);
+                    // Lancia un'eccezione più specifica o gestisci l'errore come preferisci
+                    // Per ora, rilanciamo un'eccezione generica ma con il messaggio di errore dall'API se disponibile
+                    throw new HttpRequestException($"Errore dalla API Gemini: {response.StatusCode}. Dettagli: {responseBody}");
+                }
 
-            return responseBody;
+                _logger.LogInformation("Risposta ricevuta da Gemini: {ResponseBody}", responseBody);
+
+                // Parsing della risposta JSON per estrarre il testo generato
+                using (JsonDocument doc = JsonDocument.Parse(responseBody))
+                {
+                    JsonElement candidatesElement;
+                    if (doc.RootElement.TryGetProperty("candidates", out candidatesElement) && candidatesElement.ValueKind == JsonValueKind.Array && candidatesElement.GetArrayLength() > 0)
+                    {
+                        JsonElement firstCandidate = candidatesElement[0];
+                        JsonElement contentElement;
+                        if (firstCandidate.TryGetProperty("content", out contentElement) && contentElement.TryGetProperty("parts", out JsonElement partsElement) && partsElement.ValueKind == JsonValueKind.Array && partsElement.GetArrayLength() > 0)
+                        {
+                            JsonElement firstPart = partsElement[0];
+                            JsonElement textElement;
+                            if (firstPart.TryGetProperty("text", out textElement))
+                            {
+                                return textElement.GetString() ?? string.Empty;
+                            }
+                        }
+                    }
+                    // Se la struttura non è quella attesa, logga un errore e restituisci una stringa vuota o un messaggio di errore
+                    _logger.LogError("Struttura JSON della risposta di Gemini non conforme alle aspettative. Risposta: {ResponseBody}", responseBody);
+                    throw new JsonException("Struttura JSON della risposta di Gemini non conforme alle aspettative.");
+                }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                _logger.LogError(httpEx, "Errore HttpRequestException durante la chiamata a Gemini.");
+                throw; // Rilancia l'eccezione per essere gestita dal chiamante (Index.cshtml.cs)
+            }
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "Errore JsonException durante il parsing della risposta di Gemini.");
+                throw; // Rilancia l'eccezione
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Errore generico in GetResponseAsync durante la chiamata a Gemini.");
+                throw; // Rilancia l'eccezione
+            }
         }
     }
 }
+
