@@ -32,7 +32,9 @@
                     <li class="nav-item">
                         <a class="nav-link @(ViewContext.RouteData.Values["Page"].ToString() == "/AddTask" ? "active" : "")" asp-area="" asp-page="/AddTask">Add Task</a>
                     </li>
-                    <partial name="_LoginPartial" />
+                    <li class="nav-item nav-item-login">
+                        <partial name="_LoginPartial" />
+                    </li>
                 </ul>
             </nav>
         </div>

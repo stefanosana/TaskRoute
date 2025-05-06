@@ -133,12 +133,15 @@ a {
 
 .nav {
     display: flex;
+    align-items: center; /* Allinea verticalmente gli elementi della nav */
     list-style: none;
     gap: 1.5rem;
 }
 
 .nav-item {
     position: relative;
+    display: flex; /* Per allineare il contenuto di _LoginPartial */
+    align-items: center; /* Per allineare il contenuto di _LoginPartial */
 }
 
 .nav-link {
@@ -147,6 +150,8 @@ a {
     padding: 0.5rem 0;
     transition: color 0.2s ease;
     position: relative;
+    display: flex;
+    align-items: center;
 }
 
     .nav-link:hover,
@@ -169,6 +174,18 @@ a {
     .nav-link.active::after {
         width: 100%;
     }
+
+/* Stili specifici per _LoginPartial dentro la navbar */
+.nav-item-login .nav-link,
+.nav-item-login .btn {
+    padding-top: 0.5rem; /* Adatta il padding per allineare con gli altri nav-link */
+    padding-bottom: 0.5rem;
+}
+
+.nav-item-login form {
+    display: flex; /* Assicura che il form e il suo contenuto siano inline */
+    align-items: center;
+}
 
 /* Main Content */
 main {
