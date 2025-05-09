@@ -35,13 +35,21 @@ namespace TaskRoute.Pages
         public async Task OnGetAsync()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            Commissions = await _context.Commissions
+
+            // 1) Carico le commissioni (ordinandole già per data, operazione supportata da SQLite)
+            var items = await _context.Commissions
                 .Where(c => c.UserId == userId && !c.IsCompleted)
-                .Include(c => c.Location) // Assicurati che la Location sia caricata
-                .OrderBy(c => c.DueDate)  // Ordina per data di scadenza
-                .ThenBy(c => c.SpecificTime) // Poi per orario specifico
+                .Include(c => c.Location)
+                .OrderBy(c => c.DueDate)
                 .ToListAsync();
+
+            // 2) Ordinamento client-side combinato data + ora
+            //    Uso la proprietà NotMapped DueDateTime definita in Commission  
+            Commissions = items
+                .OrderBy(c => c.DueDateTime)
+                .ToList();
         }
+
 
         // Struttura per i dati inviati a Gemini e per la sua risposta
         private class WaypointInfo

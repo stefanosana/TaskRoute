@@ -3,10 +3,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore; // Necessario per DbUpdateException e AnyAsync
 using TaskRoute.Data;
 using TaskRoute.Models;
 using System;
+// using Microsoft.Extensions.Logging; // Opzionale, per il logging
 
 namespace TaskRoute.Pages
 {
@@ -14,47 +15,35 @@ namespace TaskRoute.Pages
     public class AddTaskModel : PageModel
     {
         private readonly ApplicationDbContext _context;
-        public AddTaskModel(ApplicationDbContext ctx) => _context = ctx;
+        // private readonly ILogger<AddTaskModel> _logger; // Opzionale, per il logging
+
+        public AddTaskModel(ApplicationDbContext ctx /*, ILogger<AddTaskModel> logger */) // Includere logger se si usa
+        {
+            _context = ctx;
+            // _logger = logger; // Opzionale
+        }
 
         [BindProperty]
         public Commission Commission { get; set; }
 
         public void OnGet()
         {
-            // Inizializza eventualmente valori di default
             Commission = new Commission
             {
-                DueDate = DateTime.Today // Preimposta la data a oggi
+                DueDate = DateTime.Today
             };
         }
 
         public async Task<IActionResult> OnPostAsync()
         {
-            // Rimuovi la validazione ModelState per SpecificTime e EstimatedDurationMinutes se sono null
-            // in quanto sono opzionali. La validazione del Range per EstimatedDurationMinutes 
-            // si attiverà solo se un valore è fornito.
             ModelState.Remove("Commission.SpecificTime");
             ModelState.Remove("Commission.EstimatedDurationMinutes");
 
-            // Se SpecificTime è fornito nel form ma non è valido (es. stringa vuota), 
-            // il binding potrebbe impostarlo a TimeSpan.Zero. Lo consideriamo come non fornito.
             if (Commission.SpecificTime == TimeSpan.Zero)
             {
                 Commission.SpecificTime = null;
             }
 
-            // Se EstimatedDurationMinutes è fornito come 0, potrebbe essere l'input di default o un errore.
-            // Se 0 non è una durata valida o se vuoi trattarlo come non specificato, gestiscilo qui.
-            // Per ora, se è 0 e il campo è opzionale, lo accettiamo o lo impostiamo a null se preferito.
-            // if (Commission.EstimatedDurationMinutes == 0) Commission.EstimatedDurationMinutes = null;
-
-            // Ricontrolla ModelState dopo aver potenzialmente modificato i valori
-            // if (!ModelState.IsValid)
-            // {
-            //     return Page();
-            // }
-
-            // Leggo i dati di Location dal form
             var name = Request.Form["LocationName"].ToString().Trim();
             var address = Request.Form["LocationAddress"].ToString().Trim();
             var city = Request.Form["City"].ToString().Trim();
@@ -65,47 +54,96 @@ namespace TaskRoute.Pages
 
             if (!string.IsNullOrEmpty(latStr) && !string.IsNullOrEmpty(lonStr) && !string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(address))
             {
-                var lat = double.Parse(latStr, CultureInfo.InvariantCulture);
-                var lon = double.Parse(lonStr, CultureInfo.InvariantCulture);
-
-                var loc = await _context.Locations
-                    .FirstOrDefaultAsync(l =>
-                        l.Name == name &&
-                        l.Address == address &&
-                        l.City == city &&
-                        l.PostalCode == postal &&
-                        l.Country == country &&
-                        Math.Abs(l.Latitude - lat) < 0.00001 && // Confronto per double
-                        Math.Abs(l.Longitude - lon) < 0.00001  // Confronto per double
-                    );
-
-                if (loc == null)
+                if (double.TryParse(latStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double lat) &&
+                    double.TryParse(lonStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double lon))
                 {
-                    loc = new Location
+                    var loc = await _context.Locations
+                        .FirstOrDefaultAsync(l =>
+                            l.Name == name &&
+                            l.Address == address &&
+                            l.City == city &&
+                            l.PostalCode == postal &&
+                            l.Country == country &&
+                            Math.Abs(l.Latitude - lat) < 0.00001 &&
+                            Math.Abs(l.Longitude - lon) < 0.00001
+                        );
+
+                    if (loc == null)
                     {
-                        Name = name,
-                        Address = address,
-                        City = city,
-                        PostalCode = postal,
-                        Country = country,
-                        Latitude = lat,
-                        Longitude = lon
-                    };
-                    _context.Locations.Add(loc);
-                    await _context.SaveChangesAsync();
+                        loc = new Location
+                        {
+                            Name = name,
+                            Address = address,
+                            City = city,
+                            PostalCode = postal,
+                            Country = country,
+                            Latitude = lat,
+                            Longitude = lon
+                        };
+                        _context.Locations.Add(loc);
+                        try
+                        {
+                            await _context.SaveChangesAsync(); // Salva la nuova location
+                        }
+                        catch (DbUpdateException ex)
+                        {
+                            // _logger.LogError(ex, "Errore durante il salvataggio della nuova Location.");
+                            ModelState.AddModelError(string.Empty, "Errore durante il salvataggio dei dati della località. Riprova.");
+                            return Page();
+                        }
+                    }
+                    Commission.LocationId = loc.Id;
                 }
-                Commission.LocationId = loc.Id;
+                else
+                {
+                    // Se latitudine o longitudine non sono double validi, non creare/associare location
+                    Commission.LocationId = null;
+                    ModelState.AddModelError("Commission.LocationId", "I valori di latitudine o longitudine non sono validi.");
+                    // Non necessariamente un errore bloccante se la location è opzionale, ma informa l'utente.
+                }
             }
             else
             {
-                // Se non ci sono dati di location validi, imposta LocationId a null
                 Commission.LocationId = null;
             }
 
-            Commission.UserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                ModelState.AddModelError(string.Empty, "Utente non autenticato o non riconosciuto. Impossibile salvare l'attività.");
+                return Page();
+            }
+
+            var userExists = await _context.Users.AnyAsync(u => u.Id == userId);
+            if (!userExists)
+            {
+                ModelState.AddModelError(string.Empty, "L'utente specificato non esiste nel sistema. Impossibile salvare l'attività.");
+                return Page();
+            }
+
+            Commission.UserId = userId;
+
+            // Ricontrolla ModelState prima di aggiungere e salvare, nel caso i controlli sulla Location abbiano aggiunto errori
+            
 
             _context.Commissions.Add(Commission);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 19)
+            {
+                // _logger.LogError(sqliteEx, "Violazione del vincolo di chiave esterna (SQLite Error 19) durante il salvataggio della Commissione. UserId: {UserId}, LocationId: {LocationId}", Commission.UserId, Commission.LocationId);
+                ModelState.AddModelError(string.Empty, "Errore durante il salvataggio: i dati forniti per utente o località non sono validi. Verifica che l'utente sia corretto e che la località, se specificata, sia valida.");
+                return Page();
+            }
+            catch (DbUpdateException ex)
+            {
+                // _logger.LogError(ex, "Errore DbUpdateException generico durante il salvataggio della Commissione.");
+                ModelState.AddModelError(string.Empty, "Si è verificato un errore imprevisto durante il salvataggio. Riprova.");
+                return Page();
+            }
 
             return RedirectToPage("./TaskList");
         }
