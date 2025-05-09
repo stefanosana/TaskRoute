@@ -49,6 +49,9 @@ Questa combinazione di funzionalità rende TaskRoute ideale sia per utenti priva
   * ASP.NET Core 9 (.NET 9)
   * C#
   * Razor Pages
+  * Html 5
+  * CSS
+  * JavaScript
 * **Persistenza**:
 
   * Entity Framework Core
